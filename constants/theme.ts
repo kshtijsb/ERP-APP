@@ -5,25 +5,35 @@
 
 import { Platform } from 'react-native';
 
-const tintColorLight = '#0a7ea4';
-const tintColorDark = '#fff';
+const tintColorLight = '#22C55E'; // Vibrant Spring Green
+const tintColorDark = '#4ADE80'; // Even lighter for dark mode
 
 export const Colors = {
   light: {
-    text: '#11181C',
-    background: '#fff',
+    text: '#334155', // Slate 700 - softer than 800
+    background: '#FFFFFF', // Pure White
     tint: tintColorLight,
-    icon: '#687076',
-    tabIconDefault: '#687076',
+    icon: '#94A3B8', // Slate 400
+    tabIconDefault: '#CBD5E1', // Slate 300
     tabIconSelected: tintColorLight,
+    card: '#F8FAFC', // Slate 50 - Very light grey card
+    border: '#F1F5F9', // Slate 100 - very soft border
+    success: '#22C55E',
+    warning: '#F59E0B',
+    error: '#EF4444',
   },
   dark: {
-    text: '#ECEDEE',
-    background: '#151718',
+    text: '#F8FAFC', 
+    background: '#111827', // Slightly lighter grey-black (Slate 950/900 mix)
     tint: tintColorDark,
-    icon: '#9BA1A6',
-    tabIconDefault: '#9BA1A6',
+    icon: '#94A3B8',
+    tabIconDefault: '#475569',
     tabIconSelected: tintColorDark,
+    card: '#1F2937', // Slate 800
+    border: '#374151', // Slate 700
+    success: '#4ADE80',
+    warning: '#FBBF24',
+    error: '#F87171',
   },
 };
 

@@ -1,0 +1,10 @@
+  --non-interactive is not supported, use $CI=1 instead
+env: load .env
+env: export EXPO_PUBLIC_SUPABASE_URL EXPO_PUBLIC_SUPABASE_ANON_KEY
+Starting project at /Users/kshitijbhilare/Documents/krushikanchan/GIS App
+› Port 8081 is running this app in another window
+  /Users/kshitijbhilare/Documents/krushikanchan/GIS App (pid 46231)
+Input is required, but 'npx expo' is in non-interactive mode.
+Required input:
+> Use port 8083 instead?
+› Skipping dev server
