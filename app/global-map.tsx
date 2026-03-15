@@ -1,13 +1,13 @@
-import React, { useState, useEffect } from 'react';
-import { StyleSheet, View, ActivityIndicator, Alert, TouchableOpacity, useColorScheme } from 'react-native';
-import MapView, { Polygon } from 'react-native-maps';
-import { supabase } from '@/lib/supabase';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
-import { Stack, useRouter } from 'expo-router';
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { Colors } from '@/constants/theme';
+import { supabase } from '@/lib/supabase';
 import * as Location from 'expo-location';
+import { Stack, useRouter } from 'expo-router';
+import React, { useEffect, useState } from 'react';
+import { ActivityIndicator, Alert, StyleSheet, TouchableOpacity, useColorScheme, View } from 'react-native';
+import MapView, { Polygon } from 'react-native-maps';
 
 export default function GlobalMapScreen() {
   const [farms, setFarms] = useState<any[]>([]);
@@ -57,24 +57,24 @@ export default function GlobalMapScreen() {
   }
 
   // Calculate center of all polygons if available, otherwise default to a general area
-  const initialRegion = farms.length > 0 && farms[0].boundary.length > 0 
+  const initialRegion = farms.length > 0 && farms[0].boundary.length > 0
     ? {
-        latitude: farms[0].boundary[0].latitude,
-        longitude: farms[0].boundary[0].longitude,
-        latitudeDelta: 0.05,
-        longitudeDelta: 0.05,
-      }
+      latitude: farms[0].boundary[0].latitude,
+      longitude: farms[0].boundary[0].longitude,
+      latitudeDelta: 0.05,
+      longitudeDelta: 0.05,
+    }
     : {
-        latitude: 18.5204, // Default to Pune/Maharashtra if no data
-        longitude: 73.8567,
-        latitudeDelta: 1,
-        longitudeDelta: 1,
-      };
+      latitude: 18.5204, // Default to Pune/Maharashtra if no data
+      longitude: 73.8567,
+      latitudeDelta: 1,
+      longitudeDelta: 1,
+    };
 
   return (
     <View style={styles.container}>
       <Stack.Screen options={{ title: 'Global Map', headerShadowVisible: false }} />
-      
+
       <MapView
         style={styles.map}
         initialRegion={initialRegion}
@@ -100,8 +100,8 @@ export default function GlobalMapScreen() {
         <ThemedText style={styles.statsLabel}>Regional Overview: {farms.length} Active Farms</ThemedText>
       </ThemedView>
 
-      <TouchableOpacity 
-        style={[styles.refreshButton, { backgroundColor: Colors[colorScheme ?? 'light'].tint }]} 
+      <TouchableOpacity
+        style={[styles.refreshButton, { backgroundColor: Colors[colorScheme ?? 'light'].tint }]}
         onPress={fetchAllFarms}
         disabled={loading}
       >

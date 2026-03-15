@@ -120,25 +120,14 @@ export default function FarmerFormScreen() {
               land_area: formData.land_area ? parseFloat(formData.land_area) : null,
               crop_type: formData.crop_type,
               crop_duration: formData.crop_duration,
-              created_by: user?.id,
             },
           ])
-          .select()
+          .select('id, name')
           .single();
 
         if (farmerError) throw farmerError;
 
-        // 2. Upload avatar if selected
-        if (image && farmer) {
-          const avatarUrl = await uploadAvatar(farmer.id);
-          if (avatarUrl) {
-            await supabase
-              .from('farmers')
-              .update({ avatar_url: avatarUrl })
-              .eq('id', farmer.id);
-          }
-        }
-
+        // 2. Navigation
         if (farmer) {
           router.push({
             pathname: '/map',
@@ -153,7 +142,8 @@ export default function FarmerFormScreen() {
         // 3. Offline: Save to SQLite
         const localId = await saveFarmerOffline({
           ...formData,
-          avatar_uri: image
+          avatar_uri: image,
+          created_by: user?.id
         });
 
         Alert.alert(

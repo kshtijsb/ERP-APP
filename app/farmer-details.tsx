@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { StyleSheet, View, ScrollView, ActivityIndicator, Alert, TouchableOpacity, useColorScheme, Image, Linking } from 'react-native';
+import { StyleSheet, View, ScrollView, ActivityIndicator, Alert, TouchableOpacity, useColorScheme, Image, Linking, Platform } from 'react-native';
 import { useLocalSearchParams, useRouter, Stack } from 'expo-router';
 import MapView, { Polygon, Overlay } from 'react-native-maps';
 import { supabase } from '@/lib/supabase';
@@ -8,8 +8,14 @@ import { ThemedView } from '@/components/themed-view';
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { Colors } from '@/constants/theme';
 import { fetchNDVIOverlay, getHealthColor } from '@/lib/satellite-service';
-import { getFarmerLocalById, deleteLocalRecord } from '@/lib/offline-db';
+import { getFarmerLocalById, deleteLocalRecordGeneric, getFieldNotesByFarmerId, getSoilHealthByFarmerId, getVisitLogsByFarmerId, saveVisitLogOffline, getTreatmentLogsByFarmerId, getActiveSchedulesByFarmerId } from '@/lib/offline-db';
 import { useAuth } from '@/context/auth-context';
+import { FieldNotesModal } from '@/components/FieldNotesModal';
+import { SoilHealthModal } from '@/components/SoilHealthModal';
+import { AiAdvisorModal } from '@/components/AiAdvisorModal';
+import { TreatmentModal } from '@/components/TreatmentModal';
+import { ScheduleModal } from '@/components/ScheduleModal';
+import { fetchAndCacheWeather, parseWeatherData } from '@/lib/weather-service';
 
 export default function FarmerDetailsScreen() {
   const { id } = useLocalSearchParams();
@@ -20,6 +26,15 @@ export default function FarmerDetailsScreen() {
   const [loading, setLoading] = useState(true);
   const [analyzing, setAnalyzing] = useState(false);
   const [healthData, setHealthData] = useState<any>(null);
+  const [isNotesModalVisible, setIsNotesModalVisible] = useState(false);
+  const [isSoilModalVisible, setIsSoilModalVisible] = useState(false);
+  const [isAiModalVisible, setIsAiModalVisible] = useState(false);
+  const [isTreatmentModalVisible, setIsTreatmentModalVisible] = useState(false);
+  const [isScheduleModalVisible, setIsScheduleModalVisible] = useState(false);
+  const [activities, setActivities] = useState<any[]>([]);
+  const [weather, setWeather] = useState<any>(null);
+  const [fetchingWeather, setFetchingWeather] = useState(false);
+  const [refreshingActivities, setRefreshingActivities] = useState(false);
 
   useEffect(() => {
     const fetchFarmerDetails = async () => {
@@ -35,9 +50,8 @@ export default function FarmerDetailsScreen() {
           const { data, error } = await supabase
             .from('farmers')
             .select(`
-              *,
-              farms (*),
-              registrar:profiles!farmers_created_by_fkey(full_name, email)
+              id, name, phone_number, land_area, crop_type, crop_duration,
+              farms (*)
             `)
             .eq('id', id)
             .single();
@@ -55,6 +69,127 @@ export default function FarmerDetailsScreen() {
 
     fetchFarmerDetails();
   }, [id]);
+
+  const fetchActivities = async () => {
+    if (!id) return;
+    setRefreshingActivities(true);
+    try {
+      const farmerId = typeof id === 'string' ? id : '';
+      
+      // 1. Fetch Local Activities
+      const localNotes = await getFieldNotesByFarmerId(farmerId);
+      const localSoilHealth = await getSoilHealthByFarmerId(farmerId);
+      const localVisits = await getVisitLogsByFarmerId(farmerId);
+      const localTreatmentLogs = await getTreatmentLogsByFarmerId(farmerId);
+      const localSchedules = await getActiveSchedulesByFarmerId(farmerId);
+
+      let allNotes = [...localNotes];
+      let allSoil = [...localSoilHealth];
+      let allVisits = [...localVisits];
+      let allTreatments = [...localTreatmentLogs];
+      let allSchedules = [...localSchedules];
+
+      // 2. Fetch Online Activities (if not local ID)
+      if (!farmerId.startsWith('local_')) {
+        const { data: remoteNotes } = await supabase.from('field_notes').select('*').eq('farmer_id', farmerId);
+        if (remoteNotes) {
+          const keys = new Set(allNotes.map(n => `${n.note}_${n.created_at}`));
+          remoteNotes.forEach(rn => { if (!keys.has(`${rn.note}_${rn.created_at}`)) allNotes.push(rn); });
+        }
+
+        const { data: remoteSoil } = await supabase.from('soil_health').select('*').eq('farmer_id', farmerId);
+        if (remoteSoil) {
+          const keys = new Set(allSoil.map(s => `${s.ph}_${s.created_at}`));
+          remoteSoil.forEach(rs => { if (!keys.has(`${rs.ph}_${rs.created_at}`)) allSoil.push(rs); });
+        }
+
+        const { data: remoteVisits } = await supabase.from('visit_logs').select('*').eq('farmer_id', farmerId);
+        if (remoteVisits) {
+          const keys = new Set(allVisits.map(v => `${v.purpose}_${v.visit_date}`));
+          remoteVisits.forEach(rv => { if (!keys.has(`${rv.purpose}_${rv.visit_date}`)) allVisits.push(rv); });
+        }
+
+        const { data: remoteTreatments } = await supabase.from('treatment_logs').select('*').eq('farmer_id', farmerId);
+        if (remoteTreatments) {
+          const keys = new Set(allTreatments.map(t => `${t.product_name}_${t.application_date}`));
+          remoteTreatments.forEach(rt => { if (!keys.has(`${rt.product_name}_${rt.application_date}`)) allTreatments.push(rt); });
+        }
+
+        const { data: remoteSchedules } = await supabase.from('schedules').select('*').eq('farmer_id', farmerId);
+        if (remoteSchedules) {
+          const keys = new Set(allSchedules.map(s => `${s.title}_${s.start_date}`));
+          remoteSchedules.forEach(rs => { if (!keys.has(`${rs.title}_${rs.start_date}`)) allSchedules.push(rs); });
+        }
+      }
+
+      const combined = [
+        ...allNotes.map(n => ({ ...n, type: 'note' as const })),
+        ...allSoil.map(s => ({ ...s, type: 'soil' as const })),
+        ...allVisits.map(v => ({ ...v, type: 'visit' as const })),
+        ...allTreatments.map(t => ({ ...t, type: 'treatment' as const })),
+        ...allSchedules.map(s => ({ ...s, type: 'schedule' as const }))
+      ].sort((a: any, b: any) => {
+        const dateA = new Date(a.created_at || a.visit_date || a.application_date || a.start_date).getTime();
+        const dateB = new Date(b.created_at || b.visit_date || b.application_date || b.start_date).getTime();
+        return dateB - dateA;
+      });
+
+      setActivities(combined);
+    } catch (e) {
+      console.error('Failed to fetch activities:', e);
+    } finally {
+      setRefreshingActivities(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchActivities();
+  }, [id]);
+
+  useEffect(() => {
+    if (farmer && farm?.boundary) {
+      const parsed = getParsedBoundary(farm.boundary);
+      if (parsed.length > 0) {
+        const { latitude, longitude } = parsed[0];
+        // Only fetch if no cached weather or it's older than 4 hours
+        const cachedWeather = parseWeatherData(farmer.weather_data);
+        const lastFetch = farmer.last_weather_fetch ? new Date(farmer.last_weather_fetch).getTime() : 0;
+        const now = Date.now();
+        
+        if (!cachedWeather || (now - lastFetch > 4 * 60 * 60 * 1000)) {
+          handleRefreshWeather(latitude, longitude);
+        } else {
+          setWeather(cachedWeather);
+        }
+      }
+    }
+  }, [farmer]);
+
+  const handleRefreshWeather = async (lat?: number, lon?: number) => {
+    if (!farmer) return;
+    let latitude = lat;
+    let longitude = lon;
+
+    if (!latitude || !longitude) {
+      const parsed = getParsedBoundary(farm?.boundary);
+      if (parsed.length > 0) {
+        latitude = parsed[0].latitude;
+        longitude = parsed[0].longitude;
+      }
+    }
+
+    if (!latitude || !longitude) return;
+
+    setFetchingWeather(true);
+    try {
+      const data = await fetchAndCacheWeather(farmer.id.toString(), latitude, longitude);
+      setWeather(data);
+    } catch (e) {
+      console.error('Weather fetch fail:', e);
+    } finally {
+      setFetchingWeather(false);
+    }
+  };
 
   // Derived properties for farm mapping
   const farm = farmer ? (Array.isArray(farmer.farms) ? farmer.farms[0] : farmer.farms) : null;
@@ -138,6 +273,61 @@ export default function FarmerDetailsScreen() {
     });
   };
 
+  const handleSharePrescription = async () => {
+    if (!farmer) return;
+
+    const latestNote = activities.find(a => a.type === 'note')?.note || 'No specific notes recorded today.';
+    const soilSummary = activities.find(a => a.type === 'soil') 
+      ? `Soil pH: ${activities.find(a => a.type === 'soil').ph}, NPK levels recorded.` 
+      : 'Soil tests pending.';
+
+    const message = `*Krushikanchan Digital Prescription*\n\n` +
+      `Hello ${farmer.name},\n` +
+      `Here is the advice from today's farm visit:\n\n` +
+      `📌 *Observation*: ${latestNote}\n` +
+      `🧪 *Soil Status*: ${soilSummary}\n\n` +
+      `✅ *Recommendation*: Please visit our Krushikanchan shop to get the required fertilizers and pesticides.\n\n` +
+      `Happy Farming! 🚜`;
+
+    const url = `whatsapp://send?phone=${farmer.phone_number?.replace(/\D/g, '')}&text=${encodeURIComponent(message)}`;
+
+    try {
+      const supported = await Linking.canOpenURL(url);
+      if (supported) {
+        await Linking.openURL(url);
+      } else {
+        Alert.alert('Sharing Failed', 'WhatsApp is not installed on this device.');
+      }
+    } catch (e) {
+      Alert.alert('Error', 'Could not open WhatsApp.');
+    }
+  };
+
+  const handleQuickVisit = () => {
+    Alert.alert(
+      'Log Quick Visit',
+      'This will record a farm visit for today without any additional notes or soil tests.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        { 
+          text: 'Log Visit', 
+          onPress: async () => {
+            try {
+              await saveVisitLogOffline({
+                farmer_id: typeof id === 'string' ? id : '',
+                purpose: 'Routine Check-in'
+              });
+              Alert.alert('Success', 'Visit logged successfully');
+              fetchActivities();
+            } catch (e) {
+              Alert.alert('Error', 'Failed to log visit');
+            }
+          }
+        }
+      ]
+    );
+  };
+
   const handleDeleteProfile = () => {
     Alert.alert(
       'Delete Profile',
@@ -152,7 +342,7 @@ export default function FarmerDetailsScreen() {
               setLoading(true);
               if (typeof id === 'string' && id.startsWith('local_')) {
                 const localId = parseInt(id.replace('local_', ''));
-                await deleteLocalRecord(localId);
+                await deleteLocalRecordGeneric('pending_farmers', localId);
               } else {
                 const { error } = await supabase
                   .from('farmers')
@@ -182,18 +372,34 @@ export default function FarmerDetailsScreen() {
       
       <ThemedView style={styles.profileHero}>
         <View style={styles.avatarContainer}>
-          {farmer.avatar_url ? (
-            <Image source={{ uri: farmer.avatar_url }} style={styles.avatarImage} />
-          ) : (
-            <View style={[styles.avatarPlaceholder, { backgroundColor: Colors[colorScheme ?? 'light'].tint + '15' }]}>
-              <ThemedText style={[styles.avatarText, { color: Colors[colorScheme ?? 'light'].tint }]}>
-                {farmer.name[0].toUpperCase()}
-              </ThemedText>
-            </View>
-          )}
+          <View style={[styles.avatarPlaceholder, { backgroundColor: Colors[colorScheme ?? 'light'].tint + '15' }]}>
+            <ThemedText style={[styles.avatarText, { color: Colors[colorScheme ?? 'light'].tint }]}>
+              {farmer.name[0].toUpperCase()}
+            </ThemedText>
+          </View>
         </View>
         <ThemedText type="title" style={styles.profileName}>{farmer.name}</ThemedText>
         <ThemedText style={styles.profileMeta}>ID: {farmer.id.toString().slice(0, 8).toUpperCase()}</ThemedText>
+
+        {weather && (
+          <View style={styles.weatherBadge}>
+            <IconSymbol 
+              name={weather.condition.includes('Sunny') ? 'sun.max.fill' : 'cloud.fill'} 
+              size={14} 
+              color="#F59E0B" 
+            />
+            <ThemedText style={styles.weatherText}>
+              {weather.temp}°C • {weather.condition}
+            </ThemedText>
+            <TouchableOpacity onPress={() => handleRefreshWeather()} disabled={fetchingWeather}>
+              {fetchingWeather ? (
+                <ActivityIndicator size="small" color="#F59E0B" />
+              ) : (
+                <IconSymbol name="arrow.clockwise" size={12} color="#94A3B8" />
+              )}
+            </TouchableOpacity>
+          </View>
+        )}
       </ThemedView>
 
       <View style={styles.section}>
@@ -250,7 +456,14 @@ export default function FarmerDetailsScreen() {
         ) : (
           <TouchableOpacity 
             style={[styles.emptyMapContainer, { backgroundColor: colorScheme === 'dark' ? '#1E293B' : '#F1F5F9' }]}
-            onPress={() => router.push({ pathname: '/map', params: { farmerId: farmer.id, farmerName: farmer.name } })}
+            onPress={() => router.push({ 
+              pathname: '/map', 
+              params: { 
+                farmerId: farmer.id, 
+                farmerName: farmer.name,
+                isOffline: typeof id === 'string' && id.startsWith('local_') ? 'true' : 'false'
+              } 
+            })}
           >
             <IconSymbol name="map.fill" size={32} color="#94A3B8" />
             <ThemedText style={styles.emptyMapText}>No boundary mapped yet.</ThemedText>
@@ -268,12 +481,6 @@ export default function FarmerDetailsScreen() {
           <InfoCard label="Land Area" value={farmer.land_area ? `${farmer.land_area} Acres` : 'Not specified'} icon="square.dashed" color="#F59E0B" />
           <InfoCard label="Main Crop" value={farmer.crop_type || 'Direct entry pending'} icon="leaf.fill" color="#10B981" />
           <InfoCard label="Cycle Duration" value={farmer.crop_duration || 'Unknown'} icon="calendar" color="#8B5CF6" />
-          <InfoCard 
-            label="Registered By" 
-            value={farmer.registrar ? (farmer.registrar.full_name || farmer.registrar.email) : 'System Migrated'} 
-            icon="person.badge.shield.checkmark.fill" 
-            color="#6366F1" 
-          />
         </View>
       </View>
 
@@ -337,13 +544,114 @@ export default function FarmerDetailsScreen() {
       <View style={styles.actionSection}>
         <TouchableOpacity 
           style={[styles.remapButton, { borderColor: Colors[colorScheme ?? 'light'].tint }]}
-          onPress={() => router.push({ pathname: '/map', params: { farmerId: farmer.id, farmerName: farmer.name } })}
+          onPress={() => router.push({ 
+            pathname: '/map', 
+            params: { 
+              farmerId: farmer.id, 
+              farmerName: farmer.name,
+              isOffline: typeof id === 'string' && id.startsWith('local_') ? 'true' : 'false'
+            } 
+          })}
         >
           <IconSymbol name="arrow.triangle.2.circlepath" size={18} color={Colors[colorScheme ?? 'light'].tint} />
           <ThemedText style={[styles.remapButtonText, { color: Colors[colorScheme ?? 'light'].tint }]}>
             {hasMap ? 'Update Boundary' : 'Map Farm Boundary'}
           </ThemedText>
         </TouchableOpacity>
+
+        <TouchableOpacity 
+          style={[styles.addNoteButton, { backgroundColor: Colors[colorScheme ?? 'light'].tint + '10', borderColor: Colors[colorScheme ?? 'light'].tint }]}
+          onPress={() => setIsNotesModalVisible(true)}
+        >
+          <IconSymbol name="plus.circle.fill" size={18} color={Colors[colorScheme ?? 'light'].tint} />
+          <ThemedText style={[styles.addNoteButtonText, { color: Colors[colorScheme ?? 'light'].tint }]}>
+            Add Field Observation
+          </ThemedText>
+        </TouchableOpacity>
+
+        <TouchableOpacity 
+          style={[styles.addSoilButton, { backgroundColor: Colors[colorScheme ?? 'light'].tint + '10', borderColor: Colors[colorScheme ?? 'light'].tint }]}
+          onPress={() => setIsSoilModalVisible(true)}
+        >
+          <IconSymbol name="testtube.2" size={18} color={Colors[colorScheme ?? 'light'].tint} />
+          <ThemedText style={[styles.addSoilButtonText, { color: Colors[colorScheme ?? 'light'].tint }]}>
+            Add Soil Test Record
+          </ThemedText>
+        </TouchableOpacity>
+
+        <TouchableOpacity 
+          style={[styles.quickVisitButton, { borderColor: '#6366F1' }]}
+          onPress={handleQuickVisit}
+        >
+          <IconSymbol name="person.fill.checkmark" size={18} color="#6366F1" />
+          <ThemedText style={[styles.quickVisitButtonText, { color: '#6366F1' }]}>
+            Log Quick Visit
+          </ThemedText>
+        </TouchableOpacity>
+
+        <TouchableOpacity 
+          style={[styles.aiAdvisorButton, { backgroundColor: '#F0F9FF', borderColor: Colors[colorScheme ?? 'light'].tint }]}
+          onPress={() => setIsAiModalVisible(true)}
+        >
+          <View style={[styles.aiIconBadge, { backgroundColor: Colors[colorScheme ?? 'light'].tint }]}>
+            <ThemedText style={styles.aiIconText}>AI</ThemedText>
+          </View>
+          <ThemedText style={[styles.aiAdvisorButtonText, { color: Colors[colorScheme ?? 'light'].tint }]}>
+            Consult AI Advisor
+          </ThemedText>
+        </TouchableOpacity>
+
+        <View style={styles.actionRowSplit}>
+          <TouchableOpacity 
+            style={[styles.splitButton, { backgroundColor: '#E0F2FE', borderColor: '#0EA5E9' }]}
+            onPress={handleSharePrescription}
+          >
+            <IconSymbol name="paperplane.fill" size={16} color="#0EA5E9" />
+            <ThemedText style={[styles.splitButtonText, { color: '#0EA5E9' }]}>
+              Share Prescription
+            </ThemedText>
+          </TouchableOpacity>
+
+          <TouchableOpacity 
+            style={[styles.splitButton, { backgroundColor: '#F0FDF4', borderColor: '#22C55E' }]}
+            onPress={() => setIsTreatmentModalVisible(true)}
+          >
+            <IconSymbol name="pencil" size={16} color="#22C55E" />
+            <ThemedText style={[styles.splitButtonText, { color: '#22C55E' }]}>
+              Record Input
+            </ThemedText>
+          </TouchableOpacity>
+
+          <TouchableOpacity 
+            style={[styles.splitButton, { backgroundColor: '#EEF2FF', borderColor: '#6366F1' }]}
+            onPress={() => setIsScheduleModalVisible(true)}
+          >
+            <IconSymbol name="calendar.badge.plus" size={16} color="#6366F1" />
+            <ThemedText style={[styles.splitButtonText, { color: '#6366F1' }]}>
+              Plan Schedule
+            </ThemedText>
+          </TouchableOpacity>
+        </View>
+      </View>
+
+      <View style={styles.section}>
+        <View style={styles.sectionHeader}>
+          <ThemedText style={styles.sectionTitle}>Field Activity Timeline</ThemedText>
+          {refreshingActivities && <ActivityIndicator size="small" color={Colors[colorScheme ?? 'light'].tint} />}
+        </View>
+
+        {activities.length > 0 ? (
+          <View style={styles.timeline}>
+            {activities.map((activity, index) => (
+              <ActivityItem key={index} activity={activity} isLast={index === activities.length - 1} />
+            ))}
+          </View>
+        ) : (
+          <View style={styles.emptyTimeline}>
+            <IconSymbol name="list.bullet.indent" size={24} color="#94A3B8" />
+            <ThemedText style={styles.emptyTimelineText}>No recent field activities logged.</ThemedText>
+          </View>
+        )}
       </View>
 
       {role === 'superadmin' && (
@@ -358,7 +666,100 @@ export default function FarmerDetailsScreen() {
           </TouchableOpacity>
         </View>
       )}
+      <FieldNotesModal 
+        isVisible={isNotesModalVisible}
+        onClose={() => setIsNotesModalVisible(false)}
+        farmerId={typeof id === 'string' ? id : ''}
+        onSave={fetchActivities}
+      />
+
+      <SoilHealthModal 
+        isVisible={isSoilModalVisible}
+        onClose={() => setIsSoilModalVisible(false)}
+        farmerId={typeof id === 'string' ? id : ''}
+        onSave={fetchActivities}
+      />
+
+      <AiAdvisorModal
+        isVisible={isAiModalVisible}
+        onClose={() => setIsAiModalVisible(false)}
+        soilData={activities.find(a => a.type === 'soil') || null}
+        notes={activities.filter(a => a.type === 'note').map(a => a.note)}
+        cropType={farmer.crop_type || 'General'}
+      />
+
+      <TreatmentModal
+        isVisible={isTreatmentModalVisible}
+        onClose={() => setIsTreatmentModalVisible(false)}
+        farmerId={typeof id === 'string' ? id : ''}
+        onSave={fetchActivities}
+      />
+
+      <ScheduleModal
+        visible={isScheduleModalVisible}
+        onClose={() => setIsScheduleModalVisible(false)}
+        farmerId={typeof id === 'string' ? id : ''}
+        onSuccess={fetchActivities}
+      />
     </ScrollView>
+  );
+}
+
+function ActivityItem({ activity, isLast }: { activity: any; isLast: boolean }) {
+  const colorScheme = useColorScheme();
+  
+  const getIcon = () => {
+    switch (activity.type) {
+      case 'note': return 'text.bubble.fill';
+      case 'soil': return 'testtube.2';
+      case 'visit': return 'person.fill.checkmark';
+      case 'treatment': return 'pencil';
+      case 'schedule': return 'calendar';
+      default: return 'circle.fill';
+    }
+  };
+
+  const getColor = () => {
+    switch (activity.type) {
+      case 'note': return '#3B82F6';
+      case 'soil': return '#10B981';
+      case 'visit': return '#6366F1';
+      case 'treatment': return '#22C55E';
+      case 'schedule': return '#8B5CF6';
+      default: return '#94A3B8';
+    }
+  };
+
+  const formattedDate = new Date(activity.created_at || activity.visit_date || activity.application_date || activity.start_date).toLocaleDateString('en-IN', {
+    day: 'numeric',
+    month: 'short',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit'
+  });
+
+  return (
+    <View style={styles.activityItem}>
+      <View style={styles.activityLeft}>
+        <View style={[styles.activityIcon, { backgroundColor: getColor() + '15' }]}>
+          <IconSymbol name={getIcon()} size={14} color={getColor()} />
+        </View>
+        {!isLast && <View style={styles.activityLine} />}
+      </View>
+      <View style={styles.activityRight}>
+        <ThemedText style={styles.activityDate}>{formattedDate}</ThemedText>
+        <ThemedText style={styles.activityContent}>
+          {activity.type === 'note' && activity.note}
+          {activity.type === 'soil' && `Soil Test: pH ${activity.ph}, N: ${activity.nitrogen}, P: ${activity.phosphorus}, K: ${activity.potassium}`}
+          {activity.type === 'visit' && activity.purpose}
+          {activity.type === 'treatment' && `Input Application: ${activity.product_name} (${activity.quantity || 'Quantity not specified'})`}
+          {activity.type === 'schedule' && `New Schedule: ${activity.title} (${activity.frequency})`}
+        </ThemedText>
+        {activity.image_uri && (
+          <Image source={{ uri: activity.image_uri }} style={styles.activityImage} />
+        )}
+      </View>
+    </View>
   );
 }
 
@@ -429,6 +830,23 @@ const styles = StyleSheet.create({
     marginTop: 6,
     fontWeight: '700',
     letterSpacing: 1,
+  },
+  weatherBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#F1F5F9',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 20,
+    marginTop: 12,
+    gap: 8,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+  },
+  weatherText: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#475569',
   },
   section: {
     paddingHorizontal: 25,
@@ -640,6 +1058,149 @@ const styles = StyleSheet.create({
   remapButtonText: {
     fontSize: 16,
     fontWeight: '800',
+  },
+  addNoteButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 18,
+    borderRadius: 20,
+    borderWidth: 2,
+    gap: 10,
+    marginTop: 12,
+  },
+  addNoteButtonText: {
+    fontSize: 16,
+    fontWeight: '800',
+  },
+  addSoilButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 18,
+    borderRadius: 20,
+    borderWidth: 2,
+    gap: 10,
+    marginTop: 12,
+  },
+  addSoilButtonText: {
+    fontSize: 16,
+    fontWeight: '800',
+  },
+  quickVisitButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 18,
+    borderRadius: 20,
+    borderWidth: 2,
+    gap: 10,
+    marginTop: 12,
+    borderStyle: 'dashed',
+  },
+  quickVisitButtonText: {
+    fontSize: 16,
+    fontWeight: '800',
+  },
+  aiAdvisorButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 18,
+    borderRadius: 20,
+    borderWidth: 2,
+    gap: 10,
+    marginTop: 12,
+  },
+  aiIconBadge: {
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 6,
+  },
+  aiIconText: {
+    color: '#fff',
+    fontSize: 10,
+    fontWeight: '900',
+  },
+  aiAdvisorButtonText: {
+    fontSize: 16,
+    fontWeight: '800',
+  },
+  actionRowSplit: {
+    flexDirection: 'row',
+    gap: 12,
+    marginTop: 12,
+  },
+  splitButton: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 14,
+    borderRadius: 16,
+    borderWidth: 1.5,
+    gap: 8,
+  },
+  splitButtonText: {
+    fontSize: 13,
+    fontWeight: '800',
+  },
+  timeline: {
+    marginTop: 10,
+    paddingLeft: 10,
+  },
+  activityItem: {
+    flexDirection: 'row',
+    gap: 15,
+  },
+  activityLeft: {
+    alignItems: 'center',
+  },
+  activityIcon: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    justifyContent: 'center',
+    alignItems: 'center',
+    zIndex: 1,
+  },
+  activityLine: {
+    width: 2,
+    flex: 1,
+    backgroundColor: '#E2E8F0',
+    marginVertical: 2,
+  },
+  activityRight: {
+    flex: 1,
+    paddingBottom: 25,
+  },
+  activityDate: {
+    fontSize: 12,
+    color: '#94A3B8',
+    fontWeight: '700',
+    marginBottom: 4,
+  },
+  activityContent: {
+    fontSize: 14,
+    color: '#334155',
+    lineHeight: 20,
+    fontWeight: '500',
+  },
+  activityImage: {
+    width: '100%',
+    height: 150,
+    borderRadius: 12,
+    marginTop: 10,
+  },
+  emptyTimeline: {
+    padding: 30,
+    alignItems: 'center',
+    gap: 10,
+    opacity: 0.5,
+  },
+  emptyTimelineText: {
+    fontSize: 14,
+    fontWeight: '600',
   },
   dangerZone: {
     marginTop: 40,

@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { StyleSheet, FlatList, RefreshControl, View, TextInput, TouchableOpacity, useColorScheme, Alert, ActivityIndicator, Image } from 'react-native';
 import { useRouter, useFocusEffect } from 'expo-router';
 import { supabase } from '@/lib/supabase';
-import { getPendingRecords } from '@/lib/offline-db';
+import { getPendingFarmersWithFarms } from '@/lib/offline-db';
 import { syncOfflineData } from '@/lib/sync-engine';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
@@ -36,7 +36,7 @@ export default function FarmerDashboard() {
       const { data: onlineData, error } = await supabase
         .from('farmers')
         .select(`
-          *,
+          id, name, phone_number, land_area, crop_type, crop_duration,
           farms (
             id,
             boundary
@@ -47,7 +47,7 @@ export default function FarmerDashboard() {
       if (error) throw error;
 
       // 2. Fetch from Offline DB
-      const offlineRecords = await getPendingRecords();
+      const offlineRecords = await getPendingFarmersWithFarms();
       const formattedOffline = offlineRecords.map(rec => ({
         id: `local_${rec.id}`,
         name: rec.name,
@@ -152,15 +152,11 @@ export default function FarmerDashboard() {
         <View style={styles.cardHeader}>
           <View style={styles.farmerInfo}>
             <View style={styles.initialCircle}>
-              {item.avatar_url ? (
-                <Image source={{ uri: item.avatar_url }} style={styles.avatarImage} />
-              ) : (
-                <View style={[styles.initialCircleInner, { backgroundColor: Colors[colorScheme ?? 'light'].tint + '15' }]}>
-                  <ThemedText style={[styles.initialText, { color: Colors[colorScheme ?? 'light'].tint }]}>
-                    {item.name[0].toUpperCase()}
-                  </ThemedText>
-                </View>
-              )}
+              <View style={[styles.initialCircleInner, { backgroundColor: Colors[colorScheme ?? 'light'].tint + '15' }]}>
+                <ThemedText style={[styles.initialText, { color: Colors[colorScheme ?? 'light'].tint }]}>
+                  {item.name[0].toUpperCase()}
+                </ThemedText>
+              </View>
             </View>
             <View>
               <ThemedText type="defaultSemiBold" style={styles.farmerName}>{item.name}</ThemedText>
@@ -214,21 +210,9 @@ export default function FarmerDashboard() {
   return (
     <ThemedView style={[styles.container, { backgroundColor: Colors[colorScheme ?? 'light'].background }]}>
       <ThemedView style={styles.heroSection}>
-        <View style={styles.headerTitleRow}>
-          <View>
-            <ThemedText type="title" style={[styles.heroTitle, { color: Colors[colorScheme ?? 'light'].tint }]}>Database Hub</ThemedText>
-            <ThemedText style={styles.heroSubtitle}>GIS Tracking & Management</ThemedText>
-          </View>
-          <TouchableOpacity 
-            style={[styles.logoutBtn, { borderColor: Colors[colorScheme ?? 'light'].border }]}
-            onPress={handleLogout}
-          >
-            <IconSymbol name="rectangle.portrait.and.arrow.right" size={18} color="#94A3B8" />
-          </TouchableOpacity>
-        </View>
         <View style={styles.heroTop}>
           <View>
-            <ThemedText type="title" style={[styles.heroTitle, { color: Colors[colorScheme ?? 'light'].tint }]}>Database</ThemedText>
+            <ThemedText type="title" style={[styles.heroTitle, { color: Colors[colorScheme ?? 'light'].tint }]}>Database Hub</ThemedText>
             <ThemedText type="default" style={styles.heroSubtitle}>Managing {farmers.length} Farmer Records</ThemedText>
           </View>
           <View style={styles.actionRow}>

@@ -10,6 +10,8 @@ CREATE TABLE IF NOT EXISTS public.farmers (
     land_area NUMERIC,
     crop_type TEXT,
     crop_duration TEXT,
+    weather_data TEXT,
+    last_weather_fetch TIMESTAMPTZ,
     created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
@@ -98,3 +100,69 @@ CREATE POLICY "See registration source" ON public.profiles FOR SELECT USING (tru
 
 -- Ensure farmers can be filtered by creator
 CREATE POLICY "Staff can view all farmers" ON public.farmers FOR SELECT USING (true);
+
+-- 🏗️ Extension: Activity Tables for Farmer Portal & Staff Sync
+
+-- 1. Field Notes
+CREATE TABLE IF NOT EXISTS public.field_notes (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    farmer_id UUID NOT NULL REFERENCES public.farmers(id) ON DELETE CASCADE,
+    note TEXT NOT NULL,
+    image_uri TEXT,
+    created_at TIMESTAMPTZ DEFAULT NOW()
+);
+ALTER TABLE public.field_notes ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "Allow all public for field_notes" ON public.field_notes FOR ALL USING (true) WITH CHECK (true);
+
+-- 2. Soil Health Records
+CREATE TABLE IF NOT EXISTS public.soil_health (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    farmer_id UUID NOT NULL REFERENCES public.farmers(id) ON DELETE CASCADE,
+    ph NUMERIC,
+    nitrogen NUMERIC,
+    phosphorus NUMERIC,
+    potassium NUMERIC,
+    created_at TIMESTAMPTZ DEFAULT NOW()
+);
+ALTER TABLE public.soil_health ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "Allow all public for soil_health" ON public.soil_health FOR ALL USING (true) WITH CHECK (true);
+
+-- 3. Visit Logs
+CREATE TABLE IF NOT EXISTS public.visit_logs (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    farmer_id UUID NOT NULL REFERENCES public.farmers(id) ON DELETE CASCADE,
+    staff_id UUID REFERENCES auth.users(id),
+    visit_date TIMESTAMPTZ DEFAULT NOW(),
+    purpose TEXT,
+    created_at TIMESTAMPTZ DEFAULT NOW()
+);
+ALTER TABLE public.visit_logs ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "Allow all public for visit_logs" ON public.visit_logs FOR ALL USING (true) WITH CHECK (true);
+
+-- 4. Treatment Logs (Input Applications)
+CREATE TABLE IF NOT EXISTS public.treatment_logs (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    farmer_id UUID NOT NULL REFERENCES public.farmers(id) ON DELETE CASCADE,
+    product_name TEXT NOT NULL,
+    quantity TEXT,
+    application_date TIMESTAMPTZ DEFAULT NOW(),
+    created_at TIMESTAMPTZ DEFAULT NOW()
+);
+ALTER TABLE public.treatment_logs ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "Allow all public for treatment_logs" ON public.treatment_logs FOR ALL USING (true) WITH CHECK (true);
+
+-- 5. Schedules
+CREATE TABLE IF NOT EXISTS public.schedules (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    farmer_id UUID NOT NULL REFERENCES public.farmers(id) ON DELETE CASCADE,
+    type TEXT NOT NULL, -- 'irrigation', 'spray', etc.
+    title TEXT NOT NULL,
+    description TEXT,
+    start_date TIMESTAMPTZ NOT NULL,
+    end_date TIMESTAMPTZ,
+    frequency TEXT DEFAULT 'daily',
+    status TEXT DEFAULT 'active',
+    created_at TIMESTAMPTZ DEFAULT NOW()
+);
+ALTER TABLE public.schedules ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "Allow all public for schedules" ON public.schedules FOR ALL USING (true) WITH CHECK (true);

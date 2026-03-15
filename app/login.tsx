@@ -148,6 +148,24 @@ export default function LoginScreen() {
           </TouchableOpacity>
         </View>
 
+        <View style={styles.farmerEntry}>
+          <View style={styles.dividerRow}>
+            <View style={styles.divider} />
+            <ThemedText style={styles.dividerText}>FOR FARMERS</ThemedText>
+            <View style={styles.divider} />
+          </View>
+
+          <TouchableOpacity 
+            style={[styles.farmerButton, { borderColor: Colors[colorScheme ?? 'light'].tint }]}
+            onPress={() => router.push('/farmer-portal')}
+          >
+            <IconSymbol name="leaf.fill" size={18} color={Colors[colorScheme ?? 'light'].tint} />
+            <ThemedText style={[styles.farmerButtonText, { color: Colors[colorScheme ?? 'light'].tint }]}>
+              Access Farmer Portal
+            </ThemedText>
+          </TouchableOpacity>
+        </View>
+
         <View style={styles.footer}>
           <ThemedText style={styles.footerText}>Certified Agricultural Staff Portal v2.0</ThemedText>
           <ThemedText style={styles.footerText}>Powered by Krushikanchan Secure Identity</ThemedText>
@@ -262,5 +280,41 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     textTransform: 'uppercase',
     letterSpacing: 1,
+  },
+  farmerEntry: {
+    marginTop: 40,
+    alignItems: 'center',
+  },
+  dividerRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 20,
+    gap: 15,
+  },
+  divider: {
+    flex: 1,
+    height: 1,
+    backgroundColor: '#E2E8F0',
+  },
+  dividerText: {
+    fontSize: 10,
+    fontWeight: '900',
+    color: '#94A3B8',
+    letterSpacing: 2,
+  },
+  farmerButton: {
+    width: '100%',
+    height: 56,
+    borderRadius: 18,
+    borderWidth: 2,
+    borderStyle: 'dashed',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 10,
+  },
+  farmerButtonText: {
+    fontSize: 16,
+    fontWeight: '800',
   },
 });
