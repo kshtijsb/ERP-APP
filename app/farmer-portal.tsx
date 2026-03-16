@@ -23,8 +23,10 @@ import { supabase } from '@/lib/supabase';
 import { fetchAndCacheWeather } from '@/lib/weather-service';
 import { predictiveRiskAnalysis, PredictiveRisk } from '@/lib/ai-advisor-service';
 import { RiskCard } from '@/components/RiskCard';
+import { useTranslation } from '@/context/language-context';
 
 export default function FarmerPortalScreen() {
+  const { t, locale, setLocale } = useTranslation();
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const colorScheme = useColorScheme();
@@ -72,7 +74,7 @@ export default function FarmerPortalScreen() {
           await fetchFarmerData(id, localFarmer.crop_type);
           setIsAuthenticated(true);
         } else {
-          Alert.alert('Farmer Not Found', `No farm record found ending in ...${last10Digits}. Please contact Krushikanchan staff.`);
+          Alert.alert('Farmer Not Found', `No farm record found ending in ...${last10Digits}. Please contact KK Sathi staff.`);
         }
       }
     } catch (e) {
@@ -226,15 +228,23 @@ export default function FarmerPortalScreen() {
   if (!isAuthenticated) {
     return (
       <ThemedView style={styles.loginContainer}>
+        <TouchableOpacity 
+          style={styles.floatingLangToggle}
+          onPress={() => setLocale(locale === 'en' ? 'mr' : 'en')}
+        >
+          <ThemedText style={styles.langToggleText}>
+            {locale === 'en' ? 'मराठी' : 'English'}
+          </ThemedText>
+        </TouchableOpacity>
         <Stack.Screen options={{ title: 'Farmer Access', headerShown: false }} />
         <View style={styles.loginHeader}>
           <IconSymbol name="leaf.fill" size={60} color={Colors[colorScheme ?? 'light'].tint} />
-          <ThemedText type="title" style={styles.loginTitle}>My Farm Portal</ThemedText>
-          <ThemedText style={styles.loginSub}>Enter your registered phone number to access your farm insights.</ThemedText>
+          <ThemedText type="title" style={styles.loginTitle}>{t('myFarmPortal')}</ThemedText>
+          <ThemedText style={styles.loginSub}>{t('farmerLoginSub')}</ThemedText>
         </View>
 
         <View style={styles.inputCard}>
-          <ThemedText style={styles.label}>Phone Number</ThemedText>
+          <ThemedText style={styles.label}>{t('phone')}</ThemedText>
           <TextInput
             style={[styles.input, { color: Colors[colorScheme ?? 'light'].text, borderColor: Colors[colorScheme ?? 'light'].border }]}
             placeholder="e.g. 9876543210"
@@ -248,12 +258,12 @@ export default function FarmerPortalScreen() {
             onPress={handleLogin}
             disabled={loading}
           >
-            {loading ? <ActivityIndicator color="#fff" /> : <ThemedText style={styles.loginButtonText}>Access My Farm</ThemedText>}
+            {loading ? <ActivityIndicator color="#fff" /> : <ThemedText style={styles.loginButtonText}>{t('accessMyFarm')}</ThemedText>}
           </TouchableOpacity>
         </View>
         
         <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
-          <ThemedText style={{ color: '#94A3B8' }}>Return to Shop View</ThemedText>
+          <ThemedText style={{ color: '#94A3B8' }}>{t('returnToShop')}</ThemedText>
         </TouchableOpacity>
       </ThemedView>
     );
@@ -269,12 +279,22 @@ export default function FarmerPortalScreen() {
       {/* Modern Compact Header with Logout */}
       <View style={styles.premiumHeader}>
         <View>
-          <ThemedText style={styles.welcomeText}>Good Day,</ThemedText>
+          <ThemedText style={styles.welcomeText}>{t('goodDay')},</ThemedText>
           <ThemedText style={styles.farmerNameText}>{farmer?.name?.split(' ')[0] || 'User'}</ThemedText>
         </View>
-        <TouchableOpacity style={styles.logoutBtn} onPress={() => setIsAuthenticated(false)}>
-          <IconSymbol name="rectangle.portrait.and.arrow.right" size={20} color="#EF4444" />
-        </TouchableOpacity>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+          <TouchableOpacity 
+            style={styles.pillLangToggle}
+            onPress={() => setLocale(locale === 'en' ? 'mr' : 'en')}
+          >
+            <ThemedText style={styles.langToggleText}>
+              {locale === 'en' ? 'मराठी' : 'EN'}
+            </ThemedText>
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.logoutBtn} onPress={() => setIsAuthenticated(false)}>
+            <IconSymbol name="rectangle.portrait.and.arrow.right" size={20} color="#EF4444" />
+          </TouchableOpacity>
+        </View>
       </View>
 
       {/* Premium Pill-Style Tab Bar */}
@@ -285,21 +305,21 @@ export default function FarmerPortalScreen() {
             onPress={() => setActiveTab('insights')}
           >
             <IconSymbol name="sparkles" size={16} color={activeTab === 'insights' ? '#fff' : '#64748B'} />
-            <ThemedText style={[styles.tabText, activeTab === 'insights' && styles.activeTabText]}>Insights</ThemedText>
+            <ThemedText style={[styles.tabText, activeTab === 'insights' && styles.activeTabText]}>{t('insights')}</ThemedText>
           </TouchableOpacity>
           <TouchableOpacity 
             style={[styles.tab, activeTab === 'plan' && styles.activeTab]} 
             onPress={() => setActiveTab('plan')}
           >
             <IconSymbol name="calendar" size={16} color={activeTab === 'plan' ? '#fff' : '#64748B'} />
-            <ThemedText style={[styles.tabText, activeTab === 'plan' && styles.activeTabText]}>Plan</ThemedText>
+            <ThemedText style={[styles.tabText, activeTab === 'plan' && styles.activeTabText]}>{t('plan')}</ThemedText>
           </TouchableOpacity>
           <TouchableOpacity 
             style={[styles.tab, activeTab === 'history' && styles.activeTab]} 
             onPress={() => setActiveTab('history')}
           >
             <IconSymbol name="clock.arrow.circlepath" size={16} color={activeTab === 'history' ? '#fff' : '#64748B'} />
-            <ThemedText style={[styles.tabText, activeTab === 'history' && styles.activeTabText]}>History</ThemedText>
+            <ThemedText style={[styles.tabText, activeTab === 'history' && styles.activeTabText]}>{t('history')}</ThemedText>
           </TouchableOpacity>
         </View>
       </View>
@@ -326,20 +346,20 @@ export default function FarmerPortalScreen() {
                 <View style={styles.weatherStats}>
                   <View style={styles.statItem}>
                     <IconSymbol name="humidity.fill" size={14} color="rgba(255,255,255,0.7)" />
-                    <ThemedText style={styles.statLabel}>Humidity</ThemedText>
+                    <ThemedText style={styles.statLabel}>{t('humidityLabel')}</ThemedText>
                     <ThemedText style={styles.statValue}>{weather.humidity}%</ThemedText>
                   </View>
                   <View style={styles.statDivider} />
                   <View style={styles.statItem}>
                     <IconSymbol name="wind" size={14} color="rgba(255,255,255,0.7)" />
-                    <ThemedText style={styles.statLabel}>Condition</ThemedText>
+                    <ThemedText style={styles.statLabel}>{t('conditionLabel')}</ThemedText>
                     <ThemedText style={styles.statValue}>{weather.condition}</ThemedText>
                   </View>
                 </View>
                 {weather.humidity > 80 && (
                   <View style={styles.alertBar}>
                     <IconSymbol name="exclamationmark.shield.fill" size={12} color="#fff" />
-                    <ThemedText style={styles.alertText}>Increased pest vulnerability due to high humidity.</ThemedText>
+                    <ThemedText style={styles.alertText}>{t('pestVulnerability')}</ThemedText>
                   </View>
                 )}
               </ThemedView>
@@ -347,7 +367,7 @@ export default function FarmerPortalScreen() {
 
             <View style={styles.section}>
               <View style={styles.sectionHeader}>
-                <ThemedText style={styles.sectionTitle}>AI Risk Analysis</ThemedText>
+                <ThemedText style={styles.sectionTitle}>{t('aiRiskAnalysis')}</ThemedText>
                 <View style={styles.aiBadge}>
                   <ThemedText style={styles.aiBadgeText}>LIVE SCAN</ThemedText>
                 </View>
@@ -359,7 +379,7 @@ export default function FarmerPortalScreen() {
               ) : (
                 <View style={styles.noRisks}>
                   <IconSymbol name="checkmark.seal.fill" size={40} color="#10B981" />
-                  <ThemedText style={styles.noRisksText}>Your farm shows NO critical risks based on current climate trends.</ThemedText>
+                  <ThemedText style={styles.noRisksText}>{t('noRisksFound')}</ThemedText>
                 </View>
               )}
             </View>
@@ -370,7 +390,7 @@ export default function FarmerPortalScreen() {
           <View style={styles.tabContent}>
             <View style={styles.section}>
               <View style={styles.sectionHeader}>
-                <ThemedText style={styles.sectionTitle}>Active Schedules</ThemedText>
+                <ThemedText style={styles.sectionTitle}>{t('activeSchedules')}</ThemedText>
                 <IconSymbol name="calendar.badge.clock" size={20} color={Colors[colorScheme ?? 'light'].tint} />
               </View>
               {schedules.length > 0 ? (
@@ -404,8 +424,8 @@ export default function FarmerPortalScreen() {
               ) : (
                 <View style={styles.emptyCard}>
                   <IconSymbol name="calendar.badge.exclamationmark" size={48} color="#E2E8F0" />
-                  <ThemedText style={styles.emptyText}>No active schedules yet.</ThemedText>
-                  <ThemedText style={styles.emptySubText}>Staff will upload your irrigation and spray plan soon.</ThemedText>
+                  <ThemedText style={styles.emptyText}>{t('noActivities')}</ThemedText>
+                  <ThemedText style={styles.emptySubText}>{t('staffNotice')}</ThemedText>
                 </View>
               )}
             </View>
@@ -415,7 +435,7 @@ export default function FarmerPortalScreen() {
         {activeTab === 'history' && (
           <View style={styles.tabContent}>
             <View style={styles.section}>
-              <ThemedText style={styles.sectionTitle}>Farm Activity History</ThemedText>
+              <ThemedText style={styles.sectionTitle}>{t('farmActivityHistory')}</ThemedText>
               {activities.length > 0 ? (
                 activities.map((activity, idx) => (
                   <ThemedView key={idx} style={styles.historyCard}>
@@ -423,9 +443,9 @@ export default function FarmerPortalScreen() {
                       <View style={styles.historyTypeContainer}>
                         <View style={[styles.historyDot, { backgroundColor: activity.type === 'note' ? '#3B82F6' : activity.type === 'soil' ? '#10B981' : '#22C55E' }]} />
                         <ThemedText style={styles.historyType}>
-                          {activity.type === 'note' ? 'Observation' : 
-                           activity.type === 'soil' ? 'Soil Health' : 
-                           activity.type === 'treatment' ? 'Treatment' : 'Visit'}
+                          {activity.type === 'note' ? t('observation') : 
+                           activity.type === 'soil' ? t('soilStatus') : 
+                           activity.type === 'treatment' ? t('treatment') : t('visit')}
                         </ThemedText>
                       </View>
                       <ThemedText style={styles.historyDate}>
@@ -434,15 +454,15 @@ export default function FarmerPortalScreen() {
                     </View>
                     <ThemedText style={styles.historyContent}>
                       {activity.type === 'note' ? activity.note : 
-                       activity.type === 'soil' ? `Checked Soil Health (pH: ${activity.ph}, N: ${activity.nitrogen})` : 
-                       activity.type === 'treatment' ? `Applied ${activity.product_name} (${activity.quantity})` : activity.purpose}
+                       activity.type === 'soil' ? `${t('checkedSoil')} (pH: ${activity.ph}, N: ${activity.nitrogen})` : 
+                       activity.type === 'treatment' ? `${t('applied')} ${activity.product_name} (${activity.quantity})` : activity.purpose}
                     </ThemedText>
                   </ThemedView>
                 ))
               ) : (
                 <View style={styles.emptyCard}>
                   <IconSymbol name="doc.text.magnifyingglass" size={48} color="#E2E8F0" />
-                  <ThemedText style={styles.emptyText}>No history records yet.</ThemedText>
+                  <ThemedText style={styles.emptyText}>{t('noHistory')}</ThemedText>
                 </View>
               )}
             </View>
@@ -456,6 +476,31 @@ export default function FarmerPortalScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+  },
+  floatingLangToggle: {
+    position: 'absolute',
+    top: 50,
+    right: 30,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 20,
+    backgroundColor: '#fff',
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    zIndex: 100,
+  },
+  pillLangToggle: {
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 12,
+    backgroundColor: '#F1F5F9',
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+  },
+  langToggleText: {
+    fontSize: 12,
+    fontWeight: '800',
+    color: '#64748B',
   },
   loginContainer: {
     flex: 1,

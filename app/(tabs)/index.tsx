@@ -12,21 +12,27 @@ import { ThemedView } from '@/components/themed-view';
 import { Colors } from '@/constants/theme';
 import { useEffect } from 'react';
 import { useAuth } from '@/context/auth-context';
+import { CROPS } from '@/constants/crops';
+import { useTranslation } from '@/context/language-context';
+import { Modal, FlatList } from 'react-native';
 
 export default function FarmerFormScreen() {
+  const { t, locale, setLocale } = useTranslation();
   const colorScheme = useColorScheme();
   const router = useRouter();
-  const { user } = useAuth();
+  const { user, signOut } = useAuth();
   const [loading, setLoading] = useState(false);
   const [formData, setFormData] = useState({
     name: '',
     phone_number: '',
     land_area: '',
     crop_type: '',
+    variety: '',
     crop_duration: '',
   });
   const [focusedInput, setFocusedInput] = useState<string | null>(null);
   const [isOffline, setIsOffline] = useState(false);
+  const [varietyModalVisible, setVarietyModalVisible] = useState(false);
 
   useEffect(() => {
     initOfflineDB();
@@ -119,6 +125,7 @@ export default function FarmerFormScreen() {
               phone_number: formData.phone_number,
               land_area: formData.land_area ? parseFloat(formData.land_area) : null,
               crop_type: formData.crop_type,
+              variety: formData.variety,
               crop_duration: formData.crop_duration,
             },
           ])
@@ -127,7 +134,18 @@ export default function FarmerFormScreen() {
 
         if (farmerError) throw farmerError;
 
-        // 2. Navigation
+        // 2. Upload Avatar if exists
+        if (image && farmer) {
+          const avatarUrl = await uploadAvatar(farmer.id);
+          if (avatarUrl) {
+            await supabase
+              .from('farmers')
+              .update({ avatar_url: avatarUrl })
+              .eq('id', farmer.id);
+          }
+        }
+
+        // 3. Navigation
         if (farmer) {
           router.push({
             pathname: '/map',
@@ -169,6 +187,13 @@ export default function FarmerFormScreen() {
     }
   };
 
+  const handleLogout = () => {
+    Alert.alert('Sign Out', 'Are you sure you want to sign out?', [
+      { text: 'Cancel', style: 'cancel' },
+      { text: 'Sign Out', style: 'destructive', onPress: signOut }
+    ]);
+  };
+
   const getInputStyle = (name: string) => [
     styles.input,
     { 
@@ -186,28 +211,51 @@ export default function FarmerFormScreen() {
       style={[styles.container, { backgroundColor: Colors[colorScheme ?? 'light'].background }]}
       contentContainerStyle={styles.contentContainer}
     >
-      <ThemedView style={styles.heroSection}>
-        <View style={styles.logoRow}>
-          <Image 
-            source={require('@/assets/images/logo.png')} 
-            style={styles.brandLogo} 
-            resizeMode="contain"
-          />
-          <View>
-            <ThemedText type="title" style={[styles.heroTitle, { color: Colors[colorScheme ?? 'light'].tint }]}>Farmer Hub</ThemedText>
-            <ThemedText type="default" style={styles.heroSubtitle}>Register & Map Success</ThemedText>
+      <ThemedView style={styles.modernTopSection}>
+          <TouchableOpacity 
+            style={styles.langToggle}
+            onPress={() => setLocale(locale === 'en' ? 'mr' : 'en')}
+          >
+            <ThemedText style={styles.langToggleText}>
+              {locale === 'en' ? 'मराठी' : 'English'}
+            </ThemedText>
+          </TouchableOpacity>
+
+        <View style={styles.brandingRow}>
+          <View style={styles.logoBox}>
+            <Image 
+              source={require('@/assets/images/logo.png')} 
+              style={styles.logoImage} 
+              resizeMode="contain"
+            />
           </View>
+          <View style={{ flex: 1 }}>
+            <ThemedText style={styles.brandingLabel}>KK SATHI</ThemedText>
+            <ThemedText type="title" style={styles.pageTitleText}>{t('newRegistration')}</ThemedText>
+          </View>
+          <TouchableOpacity style={styles.navLogoutBtn} onPress={handleLogout}>
+            <IconSymbol name="rectangle.portrait.and.arrow.right" size={20} color="#EF4444" />
+          </TouchableOpacity>
         </View>
       </ThemedView>
 
-      <View style={styles.photoContainer}>
-        <TouchableOpacity style={styles.photoIconButton} onPress={pickImage}>
-          {image ? (
-            <Image source={{ uri: image }} style={styles.profilePreview} />
-          ) : (
-            <View style={styles.photoPlaceholder}>
-              <IconSymbol name="camera.fill" size={32} color="#15803D" />
-              <ThemedText style={styles.photoText}>Farmer Photo</ThemedText>
+      <View style={styles.avatarPickerSection}>
+        <TouchableOpacity style={styles.avatarTouchArea} onPress={pickImage} activeOpacity={0.8}>
+          <View style={[styles.avatarOuterRing, { borderColor: Colors[colorScheme ?? 'light'].tint + '20' }]}>
+            {image ? (
+              <Image source={{ uri: image }} style={styles.avatarFullPreview} />
+            ) : (
+              <View style={styles.avatarEmptyState}>
+                <View style={[styles.cameraIconCircle, { backgroundColor: Colors[colorScheme ?? 'light'].tint + '10' }]}>
+                  <IconSymbol name="camera.fill" size={28} color={Colors[colorScheme ?? 'light'].tint} />
+                </View>
+                <ThemedText style={styles.avatarInstruction}>Add Photo</ThemedText>
+              </View>
+            )}
+          </View>
+          {image && (
+            <View style={[styles.editBadge, { backgroundColor: Colors[colorScheme ?? 'light'].tint }]}>
+              <IconSymbol name="pencil" size={12} color="#fff" />
             </View>
           )}
         </TouchableOpacity>
@@ -215,7 +263,7 @@ export default function FarmerFormScreen() {
 
       <ThemedView style={styles.formContainer}>
         <ThemedView style={styles.inputGroup}>
-          <ThemedText style={styles.label}>Full Name *</ThemedText>
+          <ThemedText style={styles.label}>{t('fullName')} *</ThemedText>
           <TextInput
             style={getInputStyle('name')}
             placeholder="e.g. Rajesh Kumar"
@@ -228,7 +276,7 @@ export default function FarmerFormScreen() {
         </ThemedView>
 
         <ThemedView style={styles.inputGroup}>
-          <ThemedText style={styles.label}>Phone Number</ThemedText>
+          <ThemedText style={styles.label}>{t('phone')}</ThemedText>
           <TextInput
             style={getInputStyle('phone')}
             placeholder="+91 00000 00000"
@@ -241,9 +289,105 @@ export default function FarmerFormScreen() {
           />
         </ThemedView>
 
+        <ThemedView style={styles.inputGroup}>
+          <ThemedText style={styles.label}>{t('selectCrop')} *</ThemedText>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chipRow}>
+            {CROPS.map(crop => (
+              <TouchableOpacity 
+                key={crop.id}
+                style={[
+                  styles.cropChip, 
+                  formData.crop_type === crop.name && { backgroundColor: Colors[colorScheme ?? 'light'].tint, borderColor: Colors[colorScheme ?? 'light'].tint }
+                ]}
+                onPress={() => setFormData({ ...formData, crop_type: crop.name, variety: '' })}
+              >
+                <ThemedText style={[styles.chipText, formData.crop_type === crop.name && { color: '#fff' }]}>
+                  {crop.name}
+                </ThemedText>
+              </TouchableOpacity>
+            ))}
+            <TouchableOpacity 
+              style={[
+                styles.cropChip, 
+                !CROPS.find(c => c.name === formData.crop_type) && formData.crop_type !== '' && { backgroundColor: Colors[colorScheme ?? 'light'].tint, borderColor: Colors[colorScheme ?? 'light'].tint }
+              ]}
+              onPress={() => Alert.prompt('Other Crop', 'Enter crop name', (text) => setFormData({ ...formData, crop_type: text, variety: '' }))}
+            >
+              <ThemedText style={[styles.chipText, !CROPS.find(c => c.name === formData.crop_type) && formData.crop_type !== '' && { color: '#fff' }]}>
+                {t('otherCrop')}
+              </ThemedText>
+            </TouchableOpacity>
+          </ScrollView>
+        </ThemedView>
+
+        {formData.crop_type && CROPS.find(c => c.name === formData.crop_type)?.varieties.length! > 0 && (
+          <ThemedView style={styles.inputGroup}>
+            <ThemedText style={styles.label}>{t('selectVariety')} *</ThemedText>
+            <TouchableOpacity 
+              style={styles.dropdownTrigger}
+              onPress={() => setVarietyModalVisible(true)}
+            >
+              <ThemedText style={[styles.dropdownValue, !formData.variety && { color: '#94A3B8' }]}>
+                {formData.variety || t('selectVariety')}
+              </ThemedText>
+              <IconSymbol name="chevron.down" size={18} color="#64748B" />
+            </TouchableOpacity>
+
+            <Modal
+              visible={varietyModalVisible}
+              transparent={true}
+              animationType="slide"
+              onRequestClose={() => setVarietyModalVisible(false)}
+            >
+              <TouchableOpacity 
+                style={styles.modalOverlay}
+                activeOpacity={1}
+                onPress={() => setVarietyModalVisible(false)}
+              >
+                <ThemedView style={styles.modalContent}>
+                  <View style={styles.modalHeader}>
+                    <ThemedText style={styles.modalTitle}>{t('chooseVariety')}</ThemedText>
+                    <TouchableOpacity onPress={() => setVarietyModalVisible(false)}>
+                      <IconSymbol name="xmark.circle.fill" size={24} color="#CBD5E1" />
+                    </TouchableOpacity>
+                  </View>
+                  
+                  <FlatList
+                    data={CROPS.find(c => c.name === formData.crop_type)?.varieties}
+                    keyExtractor={(item) => item.id}
+                    renderItem={({ item }) => (
+                      <TouchableOpacity 
+                        style={[
+                          styles.varietyOption,
+                          formData.variety === item.name && styles.varietyOptionSelected
+                        ]}
+                        onPress={() => {
+                          setFormData({ ...formData, variety: item.name });
+                          setVarietyModalVisible(false);
+                        }}
+                      >
+                        <ThemedText style={[
+                          styles.optionText,
+                          formData.variety === item.name && { color: Colors[colorScheme ?? 'light'].tint, fontWeight: '800' }
+                        ]}>
+                          {item.name}
+                        </ThemedText>
+                        {formData.variety === item.name && (
+                          <IconSymbol name="checkmark" size={18} color={Colors[colorScheme ?? 'light'].tint} />
+                        )}
+                      </TouchableOpacity>
+                    )}
+                    contentContainerStyle={{ paddingBottom: 30 }}
+                  />
+                </ThemedView>
+              </TouchableOpacity>
+            </Modal>
+          </ThemedView>
+        )}
+
         <View style={styles.row}>
           <ThemedView style={[styles.inputGroup, { flex: 1 }]}>
-            <ThemedText style={styles.label}>Land (Acres)</ThemedText>
+            <ThemedText style={styles.label}>{t('landArea')}</ThemedText>
             <TextInput
               style={getInputStyle('land')}
               placeholder="0.0"
@@ -257,41 +401,24 @@ export default function FarmerFormScreen() {
           </ThemedView>
 
           <ThemedView style={[styles.inputGroup, { flex: 1.5 }]}>
-            <ThemedText style={styles.label}>Crop Type</ThemedText>
+            <ThemedText style={styles.label}>Cycle Duration</ThemedText>
             <TextInput
-              style={getInputStyle('crop')}
-              placeholder="e.g. Cotton"
+              style={getInputStyle('duration')}
+              placeholder="e.g. 5 Months"
               placeholderTextColor="#94A3B8"
-              value={formData.crop_type}
-              onFocus={() => setFocusedInput('crop')}
+              value={formData.crop_duration}
+              onFocus={() => setFocusedInput('duration')}
               onBlur={() => setFocusedInput(null)}
-              onChangeText={(text) => setFormData({ ...formData, crop_type: text })}
+              onChangeText={(text) => setFormData({ ...formData, crop_duration: text })}
             />
           </ThemedView>
         </View>
-
-        <ThemedView style={styles.inputGroup}>
-          <ThemedText style={styles.label}>Duration</ThemedText>
-          <TextInput
-            style={getInputStyle('duration')}
-            placeholder="e.g. 5 Months"
-            placeholderTextColor="#94A3B8"
-            value={formData.crop_duration}
-            onFocus={() => setFocusedInput('duration')}
-            onBlur={() => setFocusedInput(null)}
-            onChangeText={(text) => setFormData({ ...formData, crop_duration: text })}
-          />
-        </ThemedView>
 
         <TouchableOpacity
           style={[styles.primaryButton, { backgroundColor: Colors[colorScheme ?? 'light'].tint }, loading && styles.buttonDisabled]}
           onPress={handleSaveAndMap}
           disabled={loading}>
-          {loading ? (
-            <ActivityIndicator color="#fff" />
-          ) : (
-            <ThemedText style={styles.buttonText}>Save & Start GIS Mapping</ThemedText>
-          )}
+          {loading ? <ActivityIndicator color="#fff" /> : <ThemedText style={styles.buttonText}>{t('registerFarmer')}</ThemedText>}
         </TouchableOpacity>
       </ThemedView>
       <View style={{ height: 40 }} />
@@ -306,62 +433,217 @@ const styles = StyleSheet.create({
   contentContainer: {
     paddingBottom: 40,
   },
-  heroSection: {
+  modernTopSection: {
     paddingTop: 80,
     paddingHorizontal: 25,
-    paddingBottom: 10,
+    paddingBottom: 15,
     backgroundColor: 'transparent',
   },
-  heroTitle: {
-    fontSize: 34,
-    fontWeight: '900',
-    color: '#22C55E', // Match the new Spring Green
-    letterSpacing: -1,
-  },
-  heroSubtitle: {
-    fontSize: 16,
-    marginTop: 2,
-    color: '#64748B',
-    lineHeight: 24,
-  },
-  logoRow: {
+  brandingRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 15,
   },
-  brandLogo: {
+  logoBox: {
     width: 60,
     height: 60,
-    borderRadius: 15,
+    borderRadius: 18,
+    backgroundColor: '#fff',
+    padding: 8,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.05,
+    shadowRadius: 10,
+    elevation: 2,
+    borderWidth: 1,
+    borderColor: '#F1F5F9',
   },
-  photoContainer: {
-    alignItems: 'center',
-    marginTop: 10,
-  },
-  photoIconButton: {
-    width: 120,
-    height: 120,
-    borderRadius: 60,
-    backgroundColor: '#F1F5F9',
-    justifyContent: 'center',
-    alignItems: 'center',
-    borderWidth: 2,
-    borderColor: '#E2E8F0',
-    borderStyle: 'dashed',
-    overflow: 'hidden',
-  },
-  photoPlaceholder: {
-    alignItems: 'center',
-    gap: 8,
-  },
-  profilePreview: {
+  logoImage: {
     width: '100%',
     height: '100%',
   },
-  photoText: {
+  brandingLabel: {
     fontSize: 12,
-    fontWeight: '700',
-    color: '#15803D',
+    fontWeight: '800',
+    color: '#64748B',
+    textTransform: 'uppercase',
+    letterSpacing: 1,
+  },
+  langToggle: {
+    position: 'absolute',
+    top: 40,
+    right: 25,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 20,
+    backgroundColor: '#F1F5F9',
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+  },
+  langToggleText: {
+    fontSize: 12,
+    fontWeight: '800',
+    color: '#64748B',
+  },
+  pageTitleText: {
+    fontSize: 32,
+    fontWeight: '900',
+    letterSpacing: -0.5,
+  },
+  navLogoutBtn: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: '#FFF1F2',
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 1.5,
+    borderColor: '#FEE2E2',
+    shadowColor: '#EF4444',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+    elevation: 2,
+  },
+  avatarPickerSection: {
+    alignItems: 'center',
+    marginTop: 10,
+    marginBottom: 10,
+  },
+  avatarTouchArea: {
+    position: 'relative',
+  },
+  avatarOuterRing: {
+    width: 130,
+    height: 130,
+    borderRadius: 65,
+    borderWidth: 2,
+    borderStyle: 'dashed',
+    padding: 6,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  avatarFullPreview: {
+    width: '100%',
+    height: '100%',
+    borderRadius: 60,
+  },
+  avatarEmptyState: {
+    width: '100%',
+    height: '100%',
+    borderRadius: 60,
+    backgroundColor: '#F8FAFC',
+    justifyContent: 'center',
+    alignItems: 'center',
+    gap: 8,
+  },
+  cameraIconCircle: {
+    width: 54,
+    height: 54,
+    borderRadius: 27,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  avatarInstruction: {
+    fontSize: 12,
+    fontWeight: '800',
+    color: '#64748B',
+    textTransform: 'uppercase',
+  },
+  editBadge: {
+    position: 'absolute',
+    bottom: 5,
+    right: 5,
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    borderWidth: 3,
+    borderColor: '#fff',
+    justifyContent: 'center',
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 4,
+    elevation: 4,
+  },
+  chipRow: {
+    paddingVertical: 10,
+    gap: 12,
+  },
+  cropChip: {
+    paddingHorizontal: 20,
+    paddingVertical: 12,
+    borderRadius: 16,
+    borderWidth: 2,
+    borderColor: '#E2E8F0',
+    backgroundColor: '#fff',
+  },
+  chipText: {
+    fontSize: 14,
+    fontWeight: '800',
+    color: '#64748B',
+  },
+  dropdownTrigger: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    borderRadius: 16,
+    borderWidth: 2,
+    borderColor: '#E2E8F0',
+    backgroundColor: '#fff',
+  },
+  dropdownValue: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#334155',
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    justifyContent: 'flex-end',
+  },
+  modalContent: {
+    backgroundColor: '#fff',
+    borderTopLeftRadius: 32,
+    borderTopRightRadius: 32,
+    paddingHorizontal: 20,
+    paddingTop: 20,
+    maxHeight: '80%',
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 20,
+    paddingHorizontal: 10,
+  },
+  modalTitle: {
+    fontSize: 20,
+    fontWeight: '800',
+    color: '#1E293B',
+  },
+  varietyOption: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: 18,
+    paddingHorizontal: 16,
+    borderRadius: 16,
+    marginBottom: 8,
+    backgroundColor: '#F8FAFC',
+  },
+  varietyOptionSelected: {
+    backgroundColor: '#EEF2FF',
+    borderWidth: 1,
+    borderColor: '#6366F1',
+  },
+  optionText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#475569',
   },
   formContainer: {
     padding: 25,
@@ -377,37 +659,37 @@ const styles = StyleSheet.create({
   },
   label: {
     fontSize: 14,
-    fontWeight: '700',
-    color: '#334155',
-    marginLeft: 2,
-    letterSpacing: 0.3,
+    fontWeight: '800',
+    color: '#475569',
+    marginLeft: 4,
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
   },
   input: {
-    borderWidth: 1.5,
-    borderRadius: 16,
-    padding: 16,
+    borderWidth: 2,
+    borderRadius: 20,
+    padding: 18,
     fontSize: 16,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.03,
-    shadowRadius: 10,
-    elevation: 2,
+    fontWeight: '600',
+    backgroundColor: '#fff',
   },
   inputFocused: {
+    shadowColor: '#10B981',
+    shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.1,
-    shadowRadius: 15,
+    shadowRadius: 12,
     elevation: 4,
   },
   primaryButton: {
-    padding: 20,
-    borderRadius: 20,
+    paddingVertical: 20,
+    borderRadius: 24,
     alignItems: 'center',
     marginTop: 20,
-    shadowColor: '#15803D',
+    shadowColor: '#10B981',
     shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.25,
-    shadowRadius: 12,
-    elevation: 10,
+    shadowOpacity: 0.3,
+    shadowRadius: 15,
+    elevation: 8,
   },
   buttonDisabled: {
     opacity: 0.7,
@@ -415,7 +697,7 @@ const styles = StyleSheet.create({
   buttonText: {
     color: '#fff',
     fontSize: 18,
-    fontWeight: '800',
+    fontWeight: '900',
     letterSpacing: 0.5,
   },
 });

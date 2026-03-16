@@ -6,6 +6,7 @@ import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { Colors } from '@/constants/theme';
 import { IconSymbol } from '@/components/ui/icon-symbol';
+import { useAuth } from '@/context/auth-context';
 
 interface StaffProfile {
   id: string;
@@ -17,6 +18,7 @@ interface StaffProfile {
 
 export default function StaffManagementScreen() {
   const colorScheme = useColorScheme();
+  const { signOut } = useAuth();
   const [staff, setStaff] = useState<StaffProfile[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -89,6 +91,13 @@ export default function StaffManagementScreen() {
     fetchData();
   };
 
+  const handleLogout = () => {
+    Alert.alert('Sign Out', 'Are you sure you want to sign out?', [
+      { text: 'Cancel', style: 'cancel' },
+      { text: 'Sign Out', style: 'destructive', onPress: signOut }
+    ]);
+  };
+
   const renderItem = ({ item }: { item: StaffProfile }) => (
     <ThemedView style={[styles.card, { backgroundColor: Colors[colorScheme ?? 'light'].card, borderColor: Colors[colorScheme ?? 'light'].border }]}>
       <View style={styles.cardInfo}>
@@ -120,8 +129,15 @@ export default function StaffManagementScreen() {
     <ThemedView style={[styles.container, { backgroundColor: Colors[colorScheme ?? 'light'].background }]}>
       <Stack.Screen options={{ title: 'Staff Admin', headerShown: true }} />
       <View style={styles.header}>
-        <ThemedText type="title" style={[styles.headerTitle, { color: Colors[colorScheme ?? 'light'].tint }]}>Staff Hub</ThemedText>
-        <ThemedText style={styles.headerSubtitle}>Manage access & monitor performance</ThemedText>
+        <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+          <View style={{ flex: 1 }}>
+            <ThemedText type="title" style={[styles.headerTitle, { color: Colors[colorScheme ?? 'light'].tint }]}>Staff Hub</ThemedText>
+            <ThemedText style={styles.headerSubtitle}>Manage access & monitor performance</ThemedText>
+          </View>
+          <TouchableOpacity style={styles.logoutBtn} onPress={handleLogout}>
+            <IconSymbol name="rectangle.portrait.and.arrow.right" size={22} color="#EF4444" />
+          </TouchableOpacity>
+        </View>
       </View>
 
       {loading ? (
@@ -232,5 +248,15 @@ const styles = StyleSheet.create({
     color: '#94A3B8',
     fontSize: 16,
     fontWeight: '600',
+  },
+  logoutBtn: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: '#FFF5F5',
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 1.5,
+    borderColor: '#FEE2E2',
   },
 });

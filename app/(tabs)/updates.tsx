@@ -19,7 +19,7 @@ interface Update {
 
 export default function UpdatesScreen() {
   const colorScheme = useColorScheme();
-  const { role } = useAuth();
+  const { role, signOut } = useAuth();
   const [updates, setUpdates] = useState<Update[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -101,6 +101,13 @@ export default function UpdatesScreen() {
     }
   };
 
+  const handleLogout = () => {
+    Alert.alert('Sign Out', 'Are you sure you want to sign out?', [
+      { text: 'Cancel', style: 'cancel' },
+      { text: 'Sign Out', style: 'destructive', onPress: signOut }
+    ]);
+  };
+
   const renderItem = ({ item }: { item: Update }) => (
     <ThemedView style={[styles.card, { backgroundColor: Colors[colorScheme ?? 'light'].card, borderColor: Colors[colorScheme ?? 'light'].border }]}>
       {item.image_url && (
@@ -120,8 +127,15 @@ export default function UpdatesScreen() {
   return (
     <View style={[styles.container, { backgroundColor: Colors[colorScheme ?? 'light'].background }]}>
       <View style={styles.header}>
-        <ThemedText type="title" style={[styles.headerTitle, { color: Colors[colorScheme ?? 'light'].tint }]}>Marketing Hub</ThemedText>
-        <ThemedText style={styles.headerSubtitle}>Broadcast updates & new products</ThemedText>
+        <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+          <View style={{ flex: 1 }}>
+            <ThemedText type="title" style={[styles.headerTitle, { color: Colors[colorScheme ?? 'light'].tint }]}>Marketing Hub</ThemedText>
+            <ThemedText style={styles.headerSubtitle}>Broadcast updates & new products</ThemedText>
+          </View>
+          <TouchableOpacity style={styles.logoutBtn} onPress={handleLogout}>
+            <IconSymbol name="rectangle.portrait.and.arrow.right" size={22} color="#EF4444" />
+          </TouchableOpacity>
+        </View>
       </View>
 
       <FlatList
@@ -388,5 +402,15 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontSize: 16,
     fontWeight: '800',
-  }
+  },
+  logoutBtn: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: '#FFF5F5',
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 1.5,
+    borderColor: '#FEE2E2',
+  },
 });

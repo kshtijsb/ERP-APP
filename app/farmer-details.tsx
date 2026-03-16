@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { StyleSheet, View, ScrollView, ActivityIndicator, Alert, TouchableOpacity, useColorScheme, Image, Linking, Platform } from 'react-native';
 import { useLocalSearchParams, useRouter, Stack } from 'expo-router';
+import { ActionSheetProvider, useActionSheet } from '@expo/react-native-action-sheet';
+import { useTranslation } from '@/context/language-context';
 import MapView, { Polygon, Overlay } from 'react-native-maps';
 import { supabase } from '@/lib/supabase';
 import { ThemedText } from '@/components/themed-text';
@@ -16,9 +18,11 @@ import { AiAdvisorModal } from '@/components/AiAdvisorModal';
 import { TreatmentModal } from '@/components/TreatmentModal';
 import { ScheduleModal } from '@/components/ScheduleModal';
 import { fetchAndCacheWeather, parseWeatherData } from '@/lib/weather-service';
+import { getVariety } from '@/constants/crops';
 
 export default function FarmerDetailsScreen() {
   const { id } = useLocalSearchParams();
+  const { t, locale } = useTranslation();
   const router = useRouter();
   const colorScheme = useColorScheme();
   const { role } = useAuth();
@@ -50,7 +54,7 @@ export default function FarmerDetailsScreen() {
           const { data, error } = await supabase
             .from('farmers')
             .select(`
-              id, name, phone_number, land_area, crop_type, crop_duration,
+              id, name, phone_number, land_area, crop_type, variety, crop_duration, avatar_url,
               farms (*)
             `)
             .eq('id', id)
@@ -254,13 +258,13 @@ export default function FarmerDetailsScreen() {
   const handleShareReport = () => {
     if (!farmer || !healthData) return;
 
-    const message = `🌱 *Krushikanchan Health Report* 🌱\n\n` +
-      `*Farmer:* ${farmer.name}\n` +
-      `*Plot ID:* ${farmer.id.toString().slice(0, 8).toUpperCase()}\n` +
-      `*Vegetation Index:* ${healthData.status} (${Math.round(healthData.healthScore * 100)}%)\n` +
-      `*Status:* ${healthData.isProduction ? 'Live Satellite Verified' : 'Field Analysis Done'}\n` +
-      `*Last Scan:* ${healthData.lastUpdated}\n\n` +
-      `_Download Krushikanchan to view your farm overlay!_`;
+    const message = `🌱 *${t('healthReportTitle')}* 🌱\n\n` +
+      `*${t('farmerLabel')}:* ${farmer.name}\n` +
+      `*${t('plotID')}:* ${farmer.id.toString().slice(0, 8).toUpperCase()}\n` +
+      `*${t('vegIndex')}:* ${healthData.status} (${Math.round(healthData.healthScore * 100)}%)\n` +
+      `*${t('statusLabel')}:* ${healthData.isProduction ? (locale === 'en' ? 'Live Satellite Verified' : 'थेट सॅटेलाइट द्वारे सत्यापित') : (locale === 'en' ? 'Field Analysis Done' : 'क्षेत्र विश्लेषण पूर्ण झाले')}\n` +
+      `*${t('lastScan')}:* ${healthData.lastUpdated}\n\n` +
+      `_${t('downloadAppNotice')}_`;
 
     const whatsappUrl = `whatsapp://send?phone=${farmer.phone_number}&text=${encodeURIComponent(message)}`;
     
@@ -281,13 +285,17 @@ export default function FarmerDetailsScreen() {
       ? `Soil pH: ${activities.find(a => a.type === 'soil').ph}, NPK levels recorded.` 
       : 'Soil tests pending.';
 
-    const message = `*Krushikanchan Digital Prescription*\n\n` +
-      `Hello ${farmer.name},\n` +
-      `Here is the advice from today's farm visit:\n\n` +
-      `📌 *Observation*: ${latestNote}\n` +
-      `🧪 *Soil Status*: ${soilSummary}\n\n` +
-      `✅ *Recommendation*: Please visit our Krushikanchan shop to get the required fertilizers and pesticides.\n\n` +
-      `Happy Farming! 🚜`;
+    const varietyConfig = farmer.variety ? getVariety(farmer.crop_type, farmer.variety) : null;
+    const varietyAdvice = varietyConfig?.advice ? `\n💡 *Note for ${farmer.variety}*: ${varietyConfig.advice}` : '';
+
+    const message = `*${t('digitalPrescriptionTitle')}*\n\n` +
+      `${locale === 'en' ? 'Hello' : 'नमस्कार'} ${farmer.name},\n` +
+      `${locale === 'en' ? 'Advice for your' : 'तुमच्या'} *${farmer.crop_type}* ${farmer.variety ? `(${farmer.variety})` : ''} ${locale === 'en' ? 'plot' : 'प्लॉटसाठी सल्ला'}:\n\n` +
+      `📌 *${t('observationLabel')}*: ${latestNote}\n` +
+      `🧪 *${t('soilStatusLabel')}*: ${soilSummary}\n` +
+      `${varietyAdvice}\n\n` +
+      `✅ *${t('recommendation')}*: ${t('visitShopNotice')}\n\n` +
+      `${t('happyFarming')} 🚜`;
 
     const url = `whatsapp://send?phone=${farmer.phone_number?.replace(/\D/g, '')}&text=${encodeURIComponent(message)}`;
 
@@ -371,15 +379,31 @@ export default function FarmerDetailsScreen() {
       <Stack.Screen options={{ title: 'Farmer Profile', headerShadowVisible: false }} />
       
       <ThemedView style={styles.profileHero}>
-        <View style={styles.avatarContainer}>
-          <View style={[styles.avatarPlaceholder, { backgroundColor: Colors[colorScheme ?? 'light'].tint + '15' }]}>
-            <ThemedText style={[styles.avatarText, { color: Colors[colorScheme ?? 'light'].tint }]}>
-              {farmer.name[0].toUpperCase()}
-            </ThemedText>
+        <View style={styles.avatarWrapperContainer}>
+          <View style={[styles.avatarContainer, { borderColor: Colors[colorScheme ?? 'light'].tint + '20' }]}>
+            {farmer.avatar_url || farmer.avatar_uri ? (
+              <Image 
+                source={{ uri: farmer.avatar_url || farmer.avatar_uri }} 
+                style={styles.avatarImage} 
+              />
+            ) : (
+              <View style={[styles.avatarPlaceholder, { backgroundColor: Colors[colorScheme ?? 'light'].tint + '10' }]}>
+                <ThemedText style={[styles.avatarText, { color: Colors[colorScheme ?? 'light'].tint }]}>
+                  {farmer.name[0].toUpperCase()}
+                </ThemedText>
+              </View>
+            )}
+          </View>
+          <View style={[styles.badgeOverlay, { backgroundColor: '#22C55E' }]}>
+            <IconSymbol name="checkmark.seal.fill" size={14} color="#fff" />
           </View>
         </View>
+
         <ThemedText type="title" style={styles.profileName}>{farmer.name}</ThemedText>
-        <ThemedText style={styles.profileMeta}>ID: {farmer.id.toString().slice(0, 8).toUpperCase()}</ThemedText>
+        <View style={styles.metaRow}>
+          <IconSymbol name="phone.fill" size={12} color="#94A3B8" />
+          <ThemedText style={styles.profileMeta}>{farmer.phone_number || 'No contact info'}</ThemedText>
+        </View>
 
         {weather && (
           <View style={styles.weatherBadge}>
@@ -403,7 +427,7 @@ export default function FarmerDetailsScreen() {
       </ThemedView>
 
       <View style={styles.section}>
-        <ThemedText style={styles.sectionTitle}>Farm Boundary</ThemedText>
+        <ThemedText style={styles.sectionTitle}>{t('farmBoundary')}</ThemedText>
         {hasMap ? (
           <TouchableOpacity 
             style={styles.mapWrapper}
@@ -445,12 +469,12 @@ export default function FarmerDetailsScreen() {
                 color="#fff" 
               />
               <ThemedText style={styles.mapBadgeText}>
-                {typeof id === 'string' && id.startsWith('local_') ? 'Offline Record' : 'Synced & Live'}
+                {typeof id === 'string' && id.startsWith('local_') ? t('offlineRecord') : t('syncedLive')}
               </ThemedText>
             </View>
             <View style={styles.tapToExpand}>
               <IconSymbol name="plus.magnifyingglass" size={12} color="#fff" />
-              <ThemedText style={styles.tapToExpandText}>Tap to View Full Map</ThemedText>
+              <ThemedText style={styles.tapToExpandText}>{t('tapToViewMap')}</ThemedText>
             </View>
           </TouchableOpacity>
         ) : (
@@ -466,27 +490,27 @@ export default function FarmerDetailsScreen() {
             })}
           >
             <IconSymbol name="map.fill" size={32} color="#94A3B8" />
-            <ThemedText style={styles.emptyMapText}>No boundary mapped yet.</ThemedText>
-            <ThemedText style={styles.emptyMapAction}>Tap to Start Mapping</ThemedText>
+            <ThemedText style={styles.emptyMapText}>{t('noBoundary')}</ThemedText>
+            <ThemedText style={styles.emptyMapAction}>{t('tapToMap')}</ThemedText>
           </TouchableOpacity>
         )}
       </View>
 
       <View style={styles.section}>
         <View style={styles.sectionHeader}>
-          <ThemedText style={styles.sectionTitle}>Information Details</ThemedText>
+          <ThemedText style={styles.sectionTitle}>{t('infoDetails')}</ThemedText>
         </View>
         <View style={styles.grid}>
-          <InfoCard label="Contact Number" value={farmer.phone_number || 'Not provided'} icon="phone.fill" color="#3B82F6" />
-          <InfoCard label="Land Area" value={farmer.land_area ? `${farmer.land_area} Acres` : 'Not specified'} icon="square.dashed" color="#F59E0B" />
-          <InfoCard label="Main Crop" value={farmer.crop_type || 'Direct entry pending'} icon="leaf.fill" color="#10B981" />
-          <InfoCard label="Cycle Duration" value={farmer.crop_duration || 'Unknown'} icon="calendar" color="#8B5CF6" />
+          <InfoCard label={t('contactNumber')} value={farmer.phone_number || 'Not provided'} icon="phone.fill" color="#3B82F6" />
+          <InfoCard label={t('landArea')} value={farmer.land_area ? `${farmer.land_area} Acres` : 'Not specified'} icon="square.dashed" color="#F59E0B" />
+          <InfoCard label={t('selectCrop')} value={farmer.variety ? `${farmer.crop_type} (${farmer.variety})` : (farmer.crop_type || 'Direct entry pending')} icon="leaf.fill" color="#10B981" />
+          <InfoCard label={t('cycleDuration')} value={farmer.crop_duration || 'Unknown'} icon="calendar" color="#8B5CF6" />
         </View>
       </View>
 
       <View style={styles.section}>
         <View style={styles.sectionHeader}>
-          <ThemedText style={styles.sectionTitle}>Satellite Crop Health (NDVI)</ThemedText>
+          <ThemedText style={styles.sectionTitle}>{t('satelliteHealth')}</ThemedText>
           {analyzing && <ActivityIndicator size="small" color={Colors[colorScheme ?? 'light'].tint} />}
         </View>
         
@@ -497,7 +521,7 @@ export default function FarmerDetailsScreen() {
               <View style={styles.healthTextCol}>
                 <View style={styles.healthHeaderRow}>
                   <ThemedText style={styles.healthStatusLabel}>
-                    Vegetation Index: <ThemedText style={{ color: getHealthColor(healthData.healthScore), fontWeight: '900' }}>{healthData.status}</ThemedText>
+                    {t('vegIndex')}: <ThemedText style={{ color: getHealthColor(healthData.healthScore), fontWeight: '900' }}>{healthData.status}</ThemedText>
                   </ThemedText>
                   <View style={[styles.liveBadge, { backgroundColor: healthData.isProduction ? '#10B98120' : '#64748B20' }]}>
                     <ThemedText style={[styles.liveBadgeText, { color: healthData.isProduction ? '#10B981' : '#64748B' }]}>
@@ -505,28 +529,28 @@ export default function FarmerDetailsScreen() {
                     </ThemedText>
                   </View>
                 </View>
-                <ThemedText style={styles.healthSub}>Last Scan: {healthData.lastUpdated}</ThemedText>
+                <ThemedText style={styles.healthSub}>{t('lastScan')}: {healthData.lastUpdated}</ThemedText>
               </View>
               <ThemedText style={styles.healthPercentage}>{Math.round(healthData.healthScore * 100)}%</ThemedText>
             </View>
             <ThemedText style={styles.healthDescription}>
-              Satellite data shows {healthData.status.toLowerCase()} vegetation growth across the mapped perimeter. 
+              {t('satelliteAnalysis')}
               {healthData.isProduction 
-                ? ' This analysis is fetched in real-time from Sentinel-Hub imagery.'
+                ? ` ${t('realTimeNotice')}`
                 : ' (Simulation mode based on seeded geographic data)'}
             </ThemedText>
           </ThemedView>
         ) : (
           <View style={styles.pendingAnalysis}>
             <IconSymbol name="eye.fill" size={24} color="#94A3B8" />
-            <ThemedText style={styles.pendingText}>{analyzing ? 'Scanning Satellite Data...' : 'Map boundary to enable health index.'}</ThemedText>
+            <ThemedText style={styles.pendingText}>{analyzing ? t('scanningSatellite') : t('mapToEnable')}</ThemedText>
           </View>
         )}
       </View>
 
       <View style={styles.section}>
         <View style={styles.sectionHeader}>
-          <ThemedText style={styles.sectionTitle}>Marketing & Sharing</ThemedText>
+          <ThemedText style={styles.sectionTitle}>{t('marketingSharing')}</ThemedText>
         </View>
         <TouchableOpacity 
           style={[styles.shareCard, { backgroundColor: '#25D366' + '15', borderColor: '#25D366' }]}
@@ -534,8 +558,8 @@ export default function FarmerDetailsScreen() {
         >
           <IconSymbol name="paperplane.fill" size={24} color="#128C7E" />
           <View style={{ flex: 1 }}>
-            <ThemedText style={styles.shareTitle}>Share Analysis with Farmer</ThemedText>
-            <ThemedText style={styles.shareSub}>Send professional health report via WhatsApp</ThemedText>
+            <ThemedText style={styles.shareTitle}>{t('shareWithFarmer')}</ThemedText>
+            <ThemedText style={styles.shareSub}>{t('sendWhatsApp')}</ThemedText>
           </View>
           <IconSymbol name="chevron.right" size={16} color="#128C7E" />
         </TouchableOpacity>
@@ -555,7 +579,7 @@ export default function FarmerDetailsScreen() {
         >
           <IconSymbol name="arrow.triangle.2.circlepath" size={18} color={Colors[colorScheme ?? 'light'].tint} />
           <ThemedText style={[styles.remapButtonText, { color: Colors[colorScheme ?? 'light'].tint }]}>
-            {hasMap ? 'Update Boundary' : 'Map Farm Boundary'}
+            {hasMap ? t('updateBoundary') : t('mapFarmBoundary')}
           </ThemedText>
         </TouchableOpacity>
 
@@ -565,7 +589,7 @@ export default function FarmerDetailsScreen() {
         >
           <IconSymbol name="plus.circle.fill" size={18} color={Colors[colorScheme ?? 'light'].tint} />
           <ThemedText style={[styles.addNoteButtonText, { color: Colors[colorScheme ?? 'light'].tint }]}>
-            Add Field Observation
+            {t('addFieldObservation')}
           </ThemedText>
         </TouchableOpacity>
 
@@ -575,7 +599,7 @@ export default function FarmerDetailsScreen() {
         >
           <IconSymbol name="testtube.2" size={18} color={Colors[colorScheme ?? 'light'].tint} />
           <ThemedText style={[styles.addSoilButtonText, { color: Colors[colorScheme ?? 'light'].tint }]}>
-            Add Soil Test Record
+            {t('addSoilTest')}
           </ThemedText>
         </TouchableOpacity>
 
@@ -585,7 +609,7 @@ export default function FarmerDetailsScreen() {
         >
           <IconSymbol name="person.fill.checkmark" size={18} color="#6366F1" />
           <ThemedText style={[styles.quickVisitButtonText, { color: '#6366F1' }]}>
-            Log Quick Visit
+            {t('logQuickVisit')}
           </ThemedText>
         </TouchableOpacity>
 
@@ -597,7 +621,7 @@ export default function FarmerDetailsScreen() {
             <ThemedText style={styles.aiIconText}>AI</ThemedText>
           </View>
           <ThemedText style={[styles.aiAdvisorButtonText, { color: Colors[colorScheme ?? 'light'].tint }]}>
-            Consult AI Advisor
+            {t('consultAI')}
           </ThemedText>
         </TouchableOpacity>
 
@@ -608,7 +632,7 @@ export default function FarmerDetailsScreen() {
           >
             <IconSymbol name="paperplane.fill" size={16} color="#0EA5E9" />
             <ThemedText style={[styles.splitButtonText, { color: '#0EA5E9' }]}>
-              Share Prescription
+              {t('sharePrescription')}
             </ThemedText>
           </TouchableOpacity>
 
@@ -618,7 +642,7 @@ export default function FarmerDetailsScreen() {
           >
             <IconSymbol name="pencil" size={16} color="#22C55E" />
             <ThemedText style={[styles.splitButtonText, { color: '#22C55E' }]}>
-              Record Input
+              {t('recordInput')}
             </ThemedText>
           </TouchableOpacity>
 
@@ -628,7 +652,7 @@ export default function FarmerDetailsScreen() {
           >
             <IconSymbol name="calendar.badge.plus" size={16} color="#6366F1" />
             <ThemedText style={[styles.splitButtonText, { color: '#6366F1' }]}>
-              Plan Schedule
+              {t('planSchedule')}
             </ThemedText>
           </TouchableOpacity>
         </View>
@@ -787,49 +811,80 @@ const styles = StyleSheet.create({
   },
   profileHero: {
     alignItems: 'center',
-    paddingVertical: 35,
+    paddingVertical: 45,
     paddingHorizontal: 20,
     backgroundColor: 'transparent',
   },
+  avatarWrapperContainer: {
+    position: 'relative',
+    marginBottom: 20,
+  },
   avatarContainer: {
-    width: 90,
-    height: 90,
-    borderRadius: 45,
-    overflow: 'hidden',
-    marginBottom: 16,
+    width: 110,
+    height: 110,
+    borderRadius: 55,
+    borderWidth: 3,
+    padding: 6,
+    justifyContent: 'center',
+    alignItems: 'center',
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
+    backgroundColor: '#fff',
+    shadowOffset: { width: 0, height: 8 },
     shadowOpacity: 0.1,
-    shadowRadius: 10,
-    elevation: 3,
+    shadowRadius: 15,
+    elevation: 6,
+  },
+  badgeOverlay: {
+    position: 'absolute',
+    bottom: 0,
+    right: 5,
+    width: 30,
+    height: 30,
+    borderRadius: 15,
+    borderWidth: 3,
+    borderColor: '#fff',
+    justifyContent: 'center',
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 4,
+    elevation: 4,
   },
   avatarPlaceholder: {
     width: '100%',
     height: '100%',
+    borderRadius: 45,
     justifyContent: 'center',
     alignItems: 'center',
   },
   avatarImage: {
     width: '100%',
     height: '100%',
+    borderRadius: 45,
     resizeMode: 'cover',
   },
   avatarText: {
-    fontSize: 40,
+    fontSize: 44,
     fontWeight: '900',
   },
   profileName: {
-    fontSize: 28,
+    fontSize: 32,
     fontWeight: '900',
     color: '#0F172A',
     textAlign: 'center',
+    letterSpacing: -0.5,
+  },
+  metaRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginTop: 8,
   },
   profileMeta: {
-    fontSize: 13,
-    color: '#94A3B8',
-    marginTop: 6,
+    fontSize: 14,
+    color: '#64748B',
     fontWeight: '700',
-    letterSpacing: 1,
   },
   weatherBadge: {
     flexDirection: 'row',
@@ -1128,22 +1183,25 @@ const styles = StyleSheet.create({
   },
   actionRowSplit: {
     flexDirection: 'row',
-    gap: 12,
+    gap: 10,
     marginTop: 12,
   },
   splitButton: {
     flex: 1,
-    flexDirection: 'row',
+    paddingVertical: 18,
+    paddingHorizontal: 8,
+    borderRadius: 20,
+    borderWidth: 1.5,
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: 14,
-    borderRadius: 16,
-    borderWidth: 1.5,
     gap: 8,
   },
   splitButtonText: {
-    fontSize: 13,
-    fontWeight: '800',
+    fontSize: 11,
+    fontWeight: '900',
+    textAlign: 'center',
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
   },
   timeline: {
     marginTop: 10,

@@ -7,7 +7,10 @@ import { ThemedView } from '@/components/themed-view';
 import { Colors } from '@/constants/theme';
 import { IconSymbol } from '@/components/ui/icon-symbol';
 
+import { useTranslation } from '@/context/language-context';
+
 export default function LoginScreen() {
+  const { t, locale, setLocale } = useTranslation();
   const router = useRouter();
   const colorScheme = useColorScheme();
   const [email, setEmail] = useState('');
@@ -60,19 +63,28 @@ export default function LoginScreen() {
       <Stack.Screen options={{ headerShown: false }} />
       <ScrollView contentContainerStyle={styles.scrollContent}>
         <View style={styles.header}>
+          <TouchableOpacity 
+            style={styles.langToggle}
+            onPress={() => setLocale(locale === 'en' ? 'mr' : 'en')}
+          >
+            <ThemedText style={styles.langToggleText}>
+              {locale === 'en' ? 'मराठी' : 'English'}
+            </ThemedText>
+          </TouchableOpacity>
+
           <ThemedView style={styles.logoCircle}>
             <IconSymbol name="leaf.fill" size={40} color={Colors[colorScheme ?? 'light'].tint} />
           </ThemedView>
-          <ThemedText type="title" style={styles.title}>Krushikanchan</ThemedText>
+          <ThemedText type="title" style={styles.title}>{t('appName')}</ThemedText>
           <ThemedText style={styles.subtitle}>
-            {mode === 'login' ? 'Staff Portal Login' : 'Create Staff Account'}
+            {mode === 'login' ? t('staffPortal') + ' ' + t('login') : t('signup')}
           </ThemedText>
         </View>
 
         <View style={styles.form}>
           {mode === 'signup' && (
             <View style={styles.inputGroup}>
-              <ThemedText style={styles.label}>Full Name</ThemedText>
+              <ThemedText style={styles.label}>{t('fullName')}</ThemedText>
               <View style={[styles.inputWrapper, { borderColor: Colors[colorScheme ?? 'light'].border }]}>
                 <IconSymbol name="person.fill" size={18} color="#94A3B8" />
                 <TextInput
@@ -87,12 +99,12 @@ export default function LoginScreen() {
           )}
 
           <View style={styles.inputGroup}>
-            <ThemedText style={styles.label}>Email Address</ThemedText>
+            <ThemedText style={styles.label}>{t('email')}</ThemedText>
             <View style={[styles.inputWrapper, { borderColor: Colors[colorScheme ?? 'light'].border }]}>
               <IconSymbol name="envelope.fill" size={18} color="#94A3B8" />
               <TextInput
                 style={[styles.input, { color: Colors[colorScheme ?? 'light'].text }]}
-                placeholder="staff@krushikanchan.com"
+                placeholder="staff@kksathi.com"
                 placeholderTextColor="#94A3B8"
                 autoCapitalize="none"
                 keyboardType="email-address"
@@ -103,7 +115,7 @@ export default function LoginScreen() {
           </View>
 
           <View style={styles.inputGroup}>
-            <ThemedText style={styles.label}>Secure Password</ThemedText>
+            <ThemedText style={styles.label}>{t('password')}</ThemedText>
             <View style={[styles.inputWrapper, { borderColor: Colors[colorScheme ?? 'light'].border }]}>
               <IconSymbol name="lock.fill" size={18} color="#94A3B8" />
               <TextInput
@@ -126,7 +138,7 @@ export default function LoginScreen() {
               <ActivityIndicator color="#fff" />
             ) : (
               <ThemedText style={styles.buttonText}>
-                {mode === 'login' ? 'Sign In Securely' : 'Sign Up'}
+                {mode === 'login' ? t('login') : t('signup')}
               </ThemedText>
             )}
           </TouchableOpacity>
@@ -151,7 +163,7 @@ export default function LoginScreen() {
         <View style={styles.farmerEntry}>
           <View style={styles.dividerRow}>
             <View style={styles.divider} />
-            <ThemedText style={styles.dividerText}>FOR FARMERS</ThemedText>
+            <ThemedText style={styles.dividerText}>{t('farmerPortal').toUpperCase()}</ThemedText>
             <View style={styles.divider} />
           </View>
 
@@ -161,14 +173,14 @@ export default function LoginScreen() {
           >
             <IconSymbol name="leaf.fill" size={18} color={Colors[colorScheme ?? 'light'].tint} />
             <ThemedText style={[styles.farmerButtonText, { color: Colors[colorScheme ?? 'light'].tint }]}>
-              Access Farmer Portal
+              {t('accessPortal')}
             </ThemedText>
           </TouchableOpacity>
         </View>
 
         <View style={styles.footer}>
           <ThemedText style={styles.footerText}>Certified Agricultural Staff Portal v2.0</ThemedText>
-          <ThemedText style={styles.footerText}>Powered by Krushikanchan Secure Identity</ThemedText>
+          <ThemedText style={styles.footerText}>{t('secureIdentity')}</ThemedText>
         </View>
       </ScrollView>
     </KeyboardAvoidingView>
@@ -197,6 +209,22 @@ const styles = StyleSheet.create({
     marginBottom: 16,
     borderWidth: 1.5,
     borderColor: '#E2E8F0',
+  },
+  langToggle: {
+    position: 'absolute',
+    top: -40,
+    right: 0,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 20,
+    backgroundColor: '#F1F5F9',
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+  },
+  langToggleText: {
+    fontSize: 12,
+    fontWeight: '800',
+    color: '#64748B',
   },
   title: {
     fontSize: 28,

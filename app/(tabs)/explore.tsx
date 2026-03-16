@@ -11,8 +11,10 @@ import { Colors } from '@/constants/theme';
 import { useAuth } from '@/context/auth-context';
 import * as FileSystem from 'expo-file-system/legacy';
 import * as Sharing from 'expo-sharing';
+import { useTranslation } from '@/context/language-context';
 
 export default function FarmerDashboard() {
+  const { t, locale, setLocale } = useTranslation();
   const router = useRouter();
   const colorScheme = useColorScheme();
   const { signOut, user } = useAuth();
@@ -36,7 +38,7 @@ export default function FarmerDashboard() {
       const { data: onlineData, error } = await supabase
         .from('farmers')
         .select(`
-          id, name, phone_number, land_area, crop_type, crop_duration,
+          id, name, phone_number, land_area, crop_type, crop_duration, avatar_url,
           farms (
             id,
             boundary
@@ -119,13 +121,13 @@ export default function FarmerDashboard() {
       }).join('\n');
 
       const csvContent = header + rows;
-      const fileName = `Krushikanchan_Data_${new Date().toISOString().split('T')[0]}.csv`;
+      const fileName = `KK_Sathi_Data_${new Date().toISOString().split('T')[0]}.csv`;
       const fileUri = `${FileSystem.documentDirectory}${fileName}`;
 
       await FileSystem.writeAsStringAsync(fileUri, csvContent, { encoding: FileSystem.EncodingType.UTF8 });
       
       if (await Sharing.isAvailableAsync()) {
-        await Sharing.shareAsync(fileUri, { mimeType: 'text/csv', dialogTitle: 'Export Krushikanchan Data' });
+        await Sharing.shareAsync(fileUri, { mimeType: 'text/csv', dialogTitle: 'Export KK Sathi Data' });
       } else {
         Alert.alert('Sharing Unavailable', 'Your device does not support sharing files.');
       }
@@ -139,114 +141,171 @@ export default function FarmerDashboard() {
 
   const renderItem = ({ item }: { item: any }) => {
     const isMapped = Array.isArray(item.farms) ? item.farms.length > 0 : !!item.farms;
+    const isOffline = !!item.is_offline;
     
     return (
       <TouchableOpacity 
-        style={[styles.card, { backgroundColor: Colors[colorScheme ?? 'light'].card, borderColor: Colors[colorScheme ?? 'light'].border }]}
-        onPress={() => {
-          console.log('Navigating to details for ID:', item.id);
-          router.push({ pathname: '/farmer-details', params: { id: item.id } });
-        }}
+        key={item.id}
+        style={[styles.card, { backgroundColor: colorScheme === 'dark' ? '#1E293B' : '#FFFFFF' }]}
+        onPress={() => router.push({ pathname: '/farmer-details', params: { id: item.id } })}
         activeOpacity={0.7}
       >
-        <View style={styles.cardHeader}>
-          <View style={styles.farmerInfo}>
-            <View style={styles.initialCircle}>
-              <View style={[styles.initialCircleInner, { backgroundColor: Colors[colorScheme ?? 'light'].tint + '15' }]}>
-                <ThemedText style={[styles.initialText, { color: Colors[colorScheme ?? 'light'].tint }]}>
-                  {item.name[0].toUpperCase()}
-                </ThemedText>
-              </View>
-            </View>
-            <View>
-              <ThemedText type="defaultSemiBold" style={styles.farmerName}>{item.name}</ThemedText>
-              <ThemedText type="default" style={styles.subText}>{item.phone_number || 'No contact info'}</ThemedText>
+        <View style={styles.cardTop}>
+          <View style={styles.avatarWrapper}>
+            <View style={[styles.avatarBorder, { borderColor: Colors[colorScheme ?? 'light'].tint + '30' }]}>
+              {item.avatar_url || item.avatar_uri ? (
+                <Image 
+                  source={{ uri: item.avatar_url || item.avatar_uri }} 
+                  style={styles.avatarImage} 
+                />
+              ) : (
+                <View style={[styles.avatarPlaceholder, { backgroundColor: Colors[colorScheme ?? 'light'].tint + '10' }]}>
+                  <ThemedText style={[styles.avatarInitial, { color: Colors[colorScheme ?? 'light'].tint }]}>
+                    {item.name[0].toUpperCase()}
+                  </ThemedText>
+                </View>
+              )}
             </View>
           </View>
-          <View style={styles.badgeColumn}>
-            <ThemedView style={[
-              styles.statusBadge, 
-              item.is_offline ? styles.badgeOffline : (isMapped ? styles.badgeSuccess : styles.badgeWarning)
+          
+          <View style={styles.headerInfo}>
+            <ThemedText type="defaultSemiBold" style={styles.farmerNameText}>{item.name}</ThemedText>
+            <View style={styles.phoneRow}>
+              <IconSymbol name="phone.fill" size={12} color="#94A3B8" />
+              <ThemedText style={styles.phoneText}>{item.phone_number || 'No contact'}</ThemedText>
+            </View>
+          </View>
+
+          <View style={styles.statusBadgeContainer}>
+            <View style={[
+              styles.glassBadge, 
+              isOffline ? styles.badgeOffline : (isMapped ? styles.badgeSuccess : styles.badgeWarning)
             ]}>
-              <IconSymbol 
-                name={item.is_offline ? 'arrow.triangle.2.circlepath' : (isMapped ? 'checkmark.seal.fill' : 'exclamationmark.triangle.fill')} 
-                size={12} 
-                color={item.is_offline ? '#6366F1' : (isMapped ? Colors[colorScheme ?? 'light'].success : Colors[colorScheme ?? 'light'].warning)} 
-              />
+              <View style={[
+                styles.statusDot, 
+                { backgroundColor: isOffline ? '#6366F1' : (isMapped ? '#22C55E' : '#F59E0B') }
+              ]} />
               <ThemedText style={[
-                styles.badgeText, 
-                { color: item.is_offline ? '#6366F1' : (isMapped ? Colors[colorScheme ?? 'light'].success : Colors[colorScheme ?? 'light'].warning) }
+                styles.badgeLabel, 
+                { color: isOffline ? '#6366F1' : (isMapped ? '#166534' : '#92400E') }
               ]}>
-                {item.is_offline ? (item.sync_status === 'syncing' ? 'Syncing...' : 'Offline') : (isMapped ? 'Mapped' : 'Pending')}
+                {isOffline ? 'Syncing' : (isMapped ? 'Mapped' : 'Pending')}
               </ThemedText>
-            </ThemedView>
-            {isMapped && !item.is_offline && (
-              <View style={styles.mapIconHint}>
-                <IconSymbol name="map.fill" size={14} color={Colors[colorScheme ?? 'light'].tint} />
-                <ThemedText style={[styles.mapHintText, { color: Colors[colorScheme ?? 'light'].tint }]}>View Map</ThemedText>
-              </View>
-            )}
+            </View>
           </View>
         </View>
         
-        <View style={styles.detailsGrid}>
-          <View style={styles.gridItem}>
-            <IconSymbol name="leaf.fill" size={14} color="#64748B" />
-            <ThemedText style={styles.detailText}>{item.crop_type || 'N/A'}</ThemedText>
+        <View style={styles.cardSeparator} />
+        
+        <View style={styles.statsGrid}>
+          <View style={styles.statBox}>
+            <ThemedText style={styles.statLabel}>{t('selectCrop')}</ThemedText>
+            <View style={styles.statValueRow}>
+              <IconSymbol name="leaf.fill" size={14} color="#10B981" />
+              <ThemedText style={styles.statValue}>{item.crop_type || 'N/A'}</ThemedText>
+            </View>
           </View>
-          <View style={styles.gridItem}>
-            <IconSymbol name="calendar" size={14} color="#64748B" />
-            <ThemedText style={styles.detailText}>{item.crop_duration || 'N/A'}</ThemedText>
+          
+          <View style={styles.statDivider} />
+          
+          <View style={styles.statBox}>
+            <ThemedText style={styles.statLabel}>{t('landArea')}</ThemedText>
+            <View style={styles.statValueRow}>
+              <IconSymbol name="square.dashed" size={14} color="#6366F1" />
+              <ThemedText style={styles.statValue}>{item.land_area ? `${item.land_area} Ac` : 'N/A'}</ThemedText>
+            </View>
           </View>
-          <View style={styles.gridItem}>
-            <IconSymbol name="square.dashed" size={14} color="#64748B" />
-            <ThemedText style={styles.detailText}>{item.land_area ? `${item.land_area} Ac` : 'N/A'}</ThemedText>
-          </View>
+
+          {isMapped && !isOffline && (
+            <>
+              <View style={styles.statDivider} />
+              <View style={styles.mapHintBox}>
+                <IconSymbol name="map.fill" size={18} color={Colors[colorScheme ?? 'light'].tint} />
+              </View>
+            </>
+          )}
         </View>
       </TouchableOpacity>
     );
   };
 
+  const getStatsOverview = () => {
+    const total = farmers.length;
+    const mapped = farmers.filter(f => Array.isArray(f.farms) ? f.farms.length > 0 : !!f.farms).length;
+    const offline = farmers.filter(f => f.is_offline).length;
+    return { total, mapped, offline };
+  };
+
+  const stats = getStatsOverview();
+
   return (
-    <ThemedView style={[styles.container, { backgroundColor: Colors[colorScheme ?? 'light'].background }]}>
-      <ThemedView style={styles.heroSection}>
-        <View style={styles.heroTop}>
+    <ThemedView style={[styles.container, { backgroundColor: colorScheme === 'dark' ? Colors.dark.background : '#F8FAFC' }]}>
+      <View style={styles.modernHeader}>
+        <View style={styles.headerTopRow}>
+          <TouchableOpacity 
+            style={styles.langToggle}
+            onPress={() => setLocale(locale === 'en' ? 'mr' : 'en')}
+          >
+            <ThemedText style={styles.langToggleText}>
+              {locale === 'en' ? 'मराठी' : 'English'}
+            </ThemedText>
+          </TouchableOpacity>
+
           <View>
-            <ThemedText type="title" style={[styles.heroTitle, { color: Colors[colorScheme ?? 'light'].tint }]}>Database Hub</ThemedText>
-            <ThemedText type="default" style={styles.heroSubtitle}>Managing {farmers.length} Farmer Records</ThemedText>
+            <ThemedText style={styles.welcomeLabel}>{t('appName')} {t('ecosystem')}</ThemedText>
+            <ThemedText type="title" style={styles.pageTitle}>{t('databaseHub')}</ThemedText>
           </View>
-          <View style={styles.actionRow}>
-            <TouchableOpacity 
-              style={[styles.actionButton, { backgroundColor: Colors[colorScheme ?? 'light'].tint }]} 
-              onPress={() => router.push('/global-map')}
-            >
-              <IconSymbol name="map.fill" size={16} color="#fff" />
-              <ThemedText style={styles.actionButtonText}>Maps</ThemedText>
-            </TouchableOpacity>
-            <TouchableOpacity 
-              style={[styles.actionButton, { backgroundColor: '#334155' }]} 
-              onPress={handleExport}
-              disabled={exporting}
-            >
-              {exporting ? (
-                <ActivityIndicator size="small" color="#fff" />
-              ) : (
-                <>
-                  <IconSymbol name="square.and.arrow.up" size={16} color="#fff" />
-                  <ThemedText style={styles.actionButtonText}>Export</ThemedText>
-                </>
-              )}
-            </TouchableOpacity>
+          <TouchableOpacity style={styles.profileCircle} onPress={handleLogout}>
+             <IconSymbol name="rectangle.portrait.and.arrow.right" size={20} color="#EF4444" />
+          </TouchableOpacity>
+        </View>
+
+        <View style={styles.quickStatsRow}>
+          <View style={[styles.quickStatCard, { backgroundColor: Colors[colorScheme ?? 'light'].tint + '10' }]}>
+            <ThemedText style={[styles.quickStatValue, { color: Colors[colorScheme ?? 'light'].tint }]}>{stats.total}</ThemedText>
+            <ThemedText style={styles.quickStatLabel}>{t('totalFarmers')}</ThemedText>
+          </View>
+          <View style={[styles.quickStatCard, { backgroundColor: '#F0FDF4' }]}>
+            <ThemedText style={[stats.mapped > 0 ? styles.quickStatValue : styles.quickStatValue, { color: '#16A34A' }]}>{stats.mapped}</ThemedText>
+            <ThemedText style={styles.quickStatLabel}>{t('mapped')}</ThemedText>
+          </View>
+          <View style={[styles.quickStatCard, { backgroundColor: '#EEF2FF' }]}>
+            <ThemedText style={[styles.quickStatValue, { color: '#4F46E5' }]}>{stats.offline}</ThemedText>
+            <ThemedText style={styles.quickStatLabel}>{t('waitSync')}</ThemedText>
           </View>
         </View>
-      </ThemedView>
+
+        <View style={styles.headerActions}>
+          <TouchableOpacity 
+            style={[styles.premiumActionBtn, { backgroundColor: Colors[colorScheme ?? 'light'].tint }]} 
+            onPress={() => router.push('/global-map')}
+          >
+            <IconSymbol name="map.fill" size={18} color="#fff" />
+            <ThemedText style={styles.premiumActionText}>{t('exploreMaps')}</ThemedText>
+          </TouchableOpacity>
+          <TouchableOpacity 
+            style={[styles.premiumActionBtn, { backgroundColor: '#334155' }]} 
+            onPress={handleExport}
+            disabled={exporting}
+          >
+            {exporting ? (
+              <ActivityIndicator size="small" color="#fff" />
+            ) : (
+              <>
+                <IconSymbol name="square.and.arrow.up" size={18} color="#fff" />
+                <ThemedText style={styles.premiumActionText}>{t('exportCSV')}</ThemedText>
+              </>
+            )}
+          </TouchableOpacity>
+        </View>
+      </View>
 
       <View style={styles.searchSection}>
         <View style={[styles.searchBar, { borderColor: Colors[colorScheme ?? 'light'].border }]}>
           <IconSymbol name="magnifyingglass" size={18} color="#64748B" />
           <TextInput
             style={[styles.searchField, { color: Colors[colorScheme ?? 'light'].text }]}
-            placeholder="Search name or phone..."
+            placeholder={t('searchPlaceholder')}
             placeholderTextColor="#94A3B8"
             value={searchQuery}
             onChangeText={setSearchQuery}
@@ -287,76 +346,107 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
   },
-  heroSection: {
+  modernHeader: {
     paddingTop: 60,
-    paddingHorizontal: 25,
+    paddingHorizontal: 20,
     paddingBottom: 25,
+    backgroundColor: 'transparent',
   },
-  headerTitleRow: {
+  headerTopRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
     marginBottom: 20,
   },
-  logoutBtn: {
-    padding: 10,
-    borderRadius: 12,
-    borderWidth: 1.5,
+  welcomeLabel: {
+    fontSize: 12,
+    fontWeight: '800',
+    color: '#94A3B8',
+    textTransform: 'uppercase',
+    letterSpacing: 1.5,
+    marginBottom: 4,
+  },
+  pageTitle: {
+    fontSize: 32,
+    fontWeight: '900',
+    letterSpacing: -0.5,
+  },
+  profileCircle: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: '#fff',
     justifyContent: 'center',
     alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 5,
+    elevation: 2,
   },
-  headerTitle: {
-    fontSize: 34,
-    fontWeight: '900',
-    letterSpacing: -1,
+  langToggle: {
+    position: 'absolute',
+    top: -20,
+    right: 0,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 20,
+    backgroundColor: '#fff',
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    zIndex: 10,
   },
-  headerSubtitle: {
-    fontSize: 15,
+  langToggleText: {
+    fontSize: 12,
+    fontWeight: '800',
     color: '#64748B',
-    marginTop: 4,
-    fontWeight: '500',
   },
-  heroTitle: {
-    fontSize: 34,
+  quickStatsRow: {
+    flexDirection: 'row',
+    gap: 12,
+    marginBottom: 25,
+  },
+  quickStatCard: {
+    flex: 1,
+    padding: 16,
+    borderRadius: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  quickStatValue: {
+    fontSize: 22,
     fontWeight: '900',
-    color: '#22C55E', // Match the new lighter Spring Green
-    letterSpacing: -1,
+    marginBottom: 2,
   },
-  heroSubtitle: {
-    fontSize: 15,
+  quickStatLabel: {
+    fontSize: 10,
+    fontWeight: '800',
     color: '#64748B',
-    marginTop: 4,
-    fontWeight: '500',
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
   },
-  heroTop: {
+  headerActions: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'flex-start',
-    flexWrap: 'wrap',
-    gap: 10,
+    gap: 12,
   },
-  actionRow: {
-    flexDirection: 'row',
-    gap: 8,
-    marginTop: 5,
-  },
-  actionButton: {
+  premiumActionBtn: {
+    flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 14,
-    paddingVertical: 10,
-    borderRadius: 14,
-    gap: 6,
+    justifyContent: 'center',
+    paddingVertical: 14,
+    borderRadius: 16,
+    gap: 8,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.15,
-    shadowRadius: 8,
+    shadowOpacity: 0.12,
+    shadowRadius: 10,
     elevation: 4,
   },
-  actionButtonText: {
+  premiumActionText: {
     color: '#fff',
-    fontWeight: '700',
-    fontSize: 13,
+    fontSize: 14,
+    fontWeight: '800',
   },
   searchSection: {
     paddingHorizontal: 20,
@@ -391,8 +481,8 @@ const styles = StyleSheet.create({
   },
   searchField: {
     flex: 1,
-    fontSize: 16,
-    fontWeight: '500',
+    fontSize: 15,
+    fontWeight: '600',
   },
   listContainer: {
     paddingHorizontal: 20,
@@ -401,63 +491,89 @@ const styles = StyleSheet.create({
   },
   card: {
     padding: 20,
-    borderRadius: 24,
-    borderWidth: 1.5,
+    borderRadius: 28,
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.04,
-    shadowRadius: 12,
-    elevation: 3,
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.05,
+    shadowRadius: 20,
+    elevation: 4,
+    borderWidth: 1,
+    borderColor: 'rgba(226, 232, 240, 0.8)',
   },
-  cardHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 20,
-  },
-  farmerInfo: {
+  cardTop: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 14,
+    marginBottom: 18,
   },
-  initialCircle: {
-    width: 48,
-    height: 48,
+  avatarWrapper: {
+    marginRight: 15,
+  },
+  avatarBorder: {
+    width: 58,
+    height: 58,
     borderRadius: 24,
-    overflow: 'hidden',
-  },
-  initialCircleInner: {
-    width: '100%',
-    height: '100%',
+    borderWidth: 2,
+    padding: 3,
     justifyContent: 'center',
     alignItems: 'center',
   },
   avatarImage: {
     width: '100%',
     height: '100%',
+    borderRadius: 18,
     resizeMode: 'cover',
   },
-  initialText: {
-    fontSize: 20,
-    fontWeight: '800',
+  avatarPlaceholder: {
+    width: '100%',
+    height: '100%',
+    borderRadius: 18,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
-  farmerName: {
+  avatarInitial: {
+    fontSize: 20,
+    fontWeight: '900',
+  },
+  headerInfo: {
+    flex: 1,
+  },
+  farmerNameText: {
     fontSize: 18,
     fontWeight: '800',
     color: '#0F172A',
+    marginBottom: 4,
   },
-  subText: {
-    fontSize: 14,
-    color: '#64748B',
-    marginTop: 2,
-  },
-  statusBadge: {
+  phoneRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 5,
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-    borderRadius: 10,
+    gap: 6,
+  },
+  phoneText: {
+    fontSize: 13,
+    color: '#64748B',
+    fontWeight: '600',
+  },
+  statusBadgeContainer: {
+    alignItems: 'flex-end',
+  },
+  glassBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 12,
+    gap: 6,
+  },
+  statusDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+  },
+  badgeLabel: {
+    fontSize: 11,
+    fontWeight: '900',
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
   },
   badgeSuccess: {
     backgroundColor: '#F0FDF4',
@@ -468,53 +584,61 @@ const styles = StyleSheet.create({
   badgeOffline: {
     backgroundColor: '#EEF2FF',
   },
-  badgeText: {
-    fontSize: 11,
-    fontWeight: '800',
-    textTransform: 'uppercase',
-    letterSpacing: 0.5,
+  cardSeparator: {
+    height: 1,
+    backgroundColor: '#F1F5F9',
+    marginBottom: 18,
   },
-  badgeColumn: {
-    alignItems: 'flex-end',
-    gap: 8,
-  },
-  mapIconHint: {
+  statsGrid: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 4,
-    opacity: 0.8,
   },
-  mapHintText: {
+  statBox: {
+    flex: 1,
+  },
+  statLabel: {
     fontSize: 10,
-    fontWeight: '700',
+    fontWeight: '800',
+    color: '#94A3B8',
     textTransform: 'uppercase',
+    letterSpacing: 0.5,
+    marginBottom: 4,
   },
-  detailsGrid: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    backgroundColor: '#F8FAFC',
-    borderRadius: 16,
-    padding: 12,
-  },
-  gridItem: {
+  statValueRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
   },
-  detailText: {
-    fontSize: 13,
-    color: '#334155',
+  statValue: {
+    fontSize: 14,
     fontWeight: '700',
+    color: '#334155',
+  },
+  statDivider: {
+    width: 1,
+    height: 30,
+    backgroundColor: '#F1F5F9',
+    marginHorizontal: 15,
+  },
+  mapHintBox: {
+    width: 40,
+    height: 40,
+    borderRadius: 12,
+    backgroundColor: '#F8FAFC',
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
   },
   emptyContainer: {
     alignItems: 'center',
-    marginTop: 100,
-    opacity: 0.8,
+    marginTop: 80,
+    opacity: 0.6,
   },
   emptyText: {
     color: '#94A3B8',
     marginTop: 15,
     fontSize: 16,
-    fontWeight: '600',
+    fontWeight: '700',
   },
 });

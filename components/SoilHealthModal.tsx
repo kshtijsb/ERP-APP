@@ -6,6 +6,7 @@ import { IconSymbol } from './ui/icon-symbol';
 import { Colors } from '@/constants/theme';
 import { saveSoilHealthOffline } from '@/lib/offline-db';
 import { syncOfflineData } from '@/lib/sync-engine';
+import { useTranslation } from '@/context/language-context';
 
 interface SoilHealthModalProps {
   isVisible: boolean;
@@ -15,6 +16,7 @@ interface SoilHealthModalProps {
 }
 
 export function SoilHealthModal({ isVisible, onClose, farmerId, onSave }: SoilHealthModalProps) {
+  const { t } = useTranslation();
   const colorScheme = useColorScheme();
   const [ph, setPh] = useState('');
   const [n, setN] = useState('');
@@ -83,7 +85,7 @@ export function SoilHealthModal({ isVisible, onClose, farmerId, onSave }: SoilHe
       <View style={styles.modalOverlay}>
         <ThemedView style={styles.modalContent}>
           <View style={styles.header}>
-            <ThemedText type="subtitle">Soil Health Record</ThemedText>
+            <ThemedText type="subtitle">{t('soilHealthRecord')}</ThemedText>
             <TouchableOpacity onPress={onClose} disabled={isSaving}>
               <IconSymbol name="xmark.circle.fill" size={24} color="#999" />
             </TouchableOpacity>
@@ -91,19 +93,19 @@ export function SoilHealthModal({ isVisible, onClose, farmerId, onSave }: SoilHe
 
           <ScrollView style={styles.form}>
             <ThemedText style={styles.description}>
-              Record the latest soil test results to provide better agronomic advice.
+              {t('soilDescription')}
             </ThemedText>
 
-            {renderInput('Soil pH Level', ph, setPh, 'e.g., 6.5', 'drop.fill', '#3B82F6')}
+            {renderInput(t('soilPHLevel'), ph, setPh, 'e.g., 6.5', 'drop.fill', '#3B82F6')}
             
-            <ThemedText style={styles.sectionTitle}>Macronutrients (mg/kg)</ThemedText>
+            <ThemedText style={styles.sectionTitle}>{t('macronutrients')}</ThemedText>
             
             <View style={styles.row}>
-              {renderInput('Nitrogen (N)', n, setN, 'N', 'leaf.fill', '#10B981')}
-              {renderInput('Phosphorus (P)', p, setP, 'P', 'flame.fill', '#F59E0B')}
+              {renderInput(t('nitrogenLabel'), n, setN, 'N', 'leaf.fill', '#10B981')}
+              {renderInput(t('phosphorusLabel'), p, setP, 'P', 'flame.fill', '#F59E0B')}
             </View>
             
-            {renderInput('Potassium (K)', k, setK, 'K value', 'star.fill', '#8B5CF6')}
+            {renderInput(t('potassiumLabel'), k, setK, 'K value', 'star.fill', '#8B5CF6')}
           </ScrollView>
 
           <TouchableOpacity 
@@ -112,7 +114,7 @@ export function SoilHealthModal({ isVisible, onClose, farmerId, onSave }: SoilHe
             disabled={isSaving}
           >
             <ThemedText style={styles.saveButtonText}>
-              {isSaving ? 'Saving...' : 'Save Soil Record'}
+              {isSaving ? t('saving') : t('saveSoilRecord')}
             </ThemedText>
           </TouchableOpacity>
         </ThemedView>

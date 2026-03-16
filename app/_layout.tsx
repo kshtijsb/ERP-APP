@@ -9,6 +9,7 @@ import { AuthProvider, useAuth } from '@/context/auth-context';
 import { useRouter, useSegments } from 'expo-router';
 import { View, ActivityIndicator } from 'react-native';
 import { Colors } from '@/constants/theme';
+import { LanguageProvider } from '@/context/language-context';
 import { ThemedText } from '@/components/themed-text';
 
 export const unstable_settings = {
@@ -17,9 +18,11 @@ export const unstable_settings = {
 
 export default function RootLayout() {
   return (
-    <AuthProvider>
-      <RootLayoutNav />
-    </AuthProvider>
+    <LanguageProvider>
+      <AuthProvider>
+        <RootLayoutNav />
+      </AuthProvider>
+    </LanguageProvider>
   );
 }
 

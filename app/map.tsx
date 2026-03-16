@@ -191,7 +191,7 @@ export default function MapScreen() {
 
         if (error) throw error;
 
-        Alert.alert('Branding Success', 'Farm boundary synchronized with Krushikanchan database!', [
+        Alert.alert('Branding Success', 'Farm boundary synchronized with KK Sathi database!', [
           { text: 'View Dashboard', onPress: () => router.replace('/(tabs)/explore') },
         ]);
       }
@@ -207,7 +207,7 @@ export default function MapScreen() {
     return (
       <View style={[styles.loadingContainer, { backgroundColor: Colors[colorScheme ?? 'light'].background }]}>
         <ActivityIndicator size="large" color={Colors[colorScheme ?? 'light'].tint} />
-        <ThemedText style={{ marginTop: 15, fontWeight: '600' }}>Initializing Krushikanchan GIS...</ThemedText>
+        <ThemedText style={{ marginTop: 15, fontWeight: '600' }}>Initializing KK Sathi GIS...</ThemedText>
       </View>
     );
   }
