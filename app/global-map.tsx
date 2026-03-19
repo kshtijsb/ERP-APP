@@ -7,7 +7,7 @@ import * as Location from 'expo-location';
 import { Stack, useRouter } from 'expo-router';
 import React, { useEffect, useState } from 'react';
 import { ActivityIndicator, Alert, StyleSheet, TouchableOpacity, useColorScheme, View } from 'react-native';
-import MapView, { Polygon } from 'react-native-maps';
+import MapView, { Polygon, UrlTile, PROVIDER_GOOGLE } from 'react-native-maps';
 
 export default function GlobalMapScreen() {
   const [farms, setFarms] = useState<any[]>([]);
@@ -76,6 +76,7 @@ export default function GlobalMapScreen() {
       <Stack.Screen options={{ title: 'Global Map', headerShadowVisible: false }} />
 
       <MapView
+        provider={PROVIDER_GOOGLE}
         style={styles.map}
         initialRegion={initialRegion}
         mapType="hybrid"

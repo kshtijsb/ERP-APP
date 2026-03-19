@@ -7,6 +7,7 @@ import { ThemedView } from '@/components/themed-view';
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { Colors } from '@/constants/theme';
 import { useAuth } from '@/context/auth-context';
+import { CROPS } from '@/constants/crops';
 
 interface Update {
   id: string;
@@ -14,6 +15,7 @@ interface Update {
   content: string;
   image_url: string | null;
   category: string;
+  target_crop?: string;
   created_at: string;
 }
 
@@ -24,7 +26,7 @@ export default function UpdatesScreen() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [modalVisible, setModalVisible] = useState(false);
-  const [newUpdate, setNewUpdate] = useState({ title: '', content: '', category: 'Product', image_url: '' });
+  const [newUpdate, setNewUpdate] = useState({ title: '', content: '', category: 'Product', target_crop: 'All', image_url: '' });
   const [saving, setSaving] = useState(false);
 
   const fetchUpdates = async () => {
@@ -92,7 +94,7 @@ export default function UpdatesScreen() {
 
       Alert.alert('Broadcast Live!', 'Your update has been shared with all users.');
       setModalVisible(false);
-      setNewUpdate({ title: '', content: '', category: 'Product', image_url: '' });
+      setNewUpdate({ title: '', content: '', category: 'Product', target_crop: 'All', image_url: '' });
       fetchUpdates();
     } catch (error: any) {
       Alert.alert('Error', error.message);
@@ -114,8 +116,15 @@ export default function UpdatesScreen() {
         <Image source={{ uri: item.image_url }} style={styles.cardImage} />
       )}
       <View style={styles.cardContent}>
-        <View style={styles.categoryBadge}>
-          <ThemedText style={styles.categoryText}>{item.category}</ThemedText>
+        <View style={{ flexDirection: 'row', gap: 8, marginBottom: 8, flexWrap: 'wrap' }}>
+          <View style={styles.categoryBadge}>
+            <ThemedText style={styles.categoryText}>{item.category}</ThemedText>
+          </View>
+          {item.target_crop && item.target_crop !== 'All' && (
+            <View style={[styles.categoryBadge, { backgroundColor: '#EFF6FF' }]}>
+              <ThemedText style={[styles.categoryText, { color: '#2563EB' }]}>🎯 {item.target_crop}</ThemedText>
+            </View>
+          )}
         </View>
         <ThemedText type="defaultSemiBold" style={styles.title}>{item.title}</ThemedText>
         <ThemedText style={styles.content}>{item.content}</ThemedText>
@@ -208,6 +217,22 @@ export default function UpdatesScreen() {
                 ))}
               </View>
 
+              <ThemedText style={styles.inputLabel}>Target Crop</ThemedText>
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.categoryRow}>
+                {['All', ...CROPS.map(c => c.name)].map((crop) => (
+                  <TouchableOpacity
+                    key={crop}
+                    style={[
+                      styles.categoryBtn,
+                      newUpdate.target_crop === crop && { backgroundColor: Colors[colorScheme ?? 'light'].tint, borderColor: Colors[colorScheme ?? 'light'].tint }
+                    ]}
+                    onPress={() => setNewUpdate({ ...newUpdate, target_crop: crop })}
+                  >
+                    <ThemedText style={[styles.categoryBtnText, newUpdate.target_crop === crop && { color: '#fff' }]}>{crop}</ThemedText>
+                  </TouchableOpacity>
+                ))}
+              </ScrollView>
+
               <ThemedText style={styles.inputLabel}>Image URL (Optional)</ThemedText>
               <TextInput
                 style={[styles.input, { color: Colors[colorScheme ?? 'light'].text, borderColor: Colors[colorScheme ?? 'light'].border }]}
@@ -287,10 +312,9 @@ const styles = StyleSheet.create({
   categoryBadge: {
     backgroundColor: '#F0FDF4',
     paddingHorizontal: 10,
-    paddingVertical: 4,
+    paddingVertical: 5,
     borderRadius: 8,
     alignSelf: 'flex-start',
-    marginBottom: 8,
   },
   categoryText: {
     fontSize: 11,

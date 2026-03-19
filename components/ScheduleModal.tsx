@@ -111,17 +111,30 @@ export function ScheduleModal({ visible, onClose, farmerId, onSuccess, currentWe
 
             {/* Smart Templates */}
             <View style={styles.inputGroup}>
-              <ThemedText style={styles.label}>Quick Presets</ThemedText>
-              <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.chipScroll}>
-                <TouchableOpacity style={styles.chip} onPress={() => { setType('irrigation'); setTitle('Routine Drip Irrigation'); setFrequency('daily'); setDays('7'); }}>
-                  <ThemedText style={styles.chipText}>💧 1-Week Drip</ThemedText>
-                </TouchableOpacity>
-                <TouchableOpacity style={styles.chip} onPress={() => { setType('spray'); setTitle('NPK 19:19:19 Spray'); setFrequency('weekly'); setDays('14'); }}>
-                  <ThemedText style={styles.chipText}>🌱 NPK Spray</ThemedText>
-                </TouchableOpacity>
-                <TouchableOpacity style={styles.chip} onPress={() => { setType('spray'); setTitle('Neem Oil Preventative'); setFrequency('bi-weekly'); setDays('28'); }}>
-                  <ThemedText style={styles.chipText}>🌿 Neem Preventative</ThemedText>
-                </TouchableOpacity>
+              <ThemedText style={styles.label}>Smart Suggestion Presets</ThemedText>
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.chipScroll} contentContainerStyle={{ gap: 10 }}>
+                {type === 'irrigation' ? (
+                  <>
+                    <TouchableOpacity style={styles.chip} onPress={() => { setTitle('Daily Drip Irrigation'); setFrequency('daily'); setDays('7'); }}>
+                      <ThemedText style={styles.chipText}>💧 7-Day Drip</ThemedText>
+                    </TouchableOpacity>
+                    <TouchableOpacity style={styles.chip} onPress={() => { setTitle('Weekly Flood Irrigation'); setFrequency('weekly'); setDays('30'); }}>
+                      <ThemedText style={styles.chipText}>🌊 Monthly Flood</ThemedText>
+                    </TouchableOpacity>
+                  </>
+                ) : (
+                  <>
+                    <TouchableOpacity style={styles.chip} onPress={() => { setTitle('NPK 19:19:19 Foliar Spray'); setFrequency('weekly'); setDays('14'); }}>
+                      <ThemedText style={styles.chipText}>🌿 NPK Booster</ThemedText>
+                    </TouchableOpacity>
+                    <TouchableOpacity style={styles.chip} onPress={() => { setTitle('Pesticide Application - Round 1'); setFrequency('custom'); setDays('1'); }}>
+                      <ThemedText style={styles.chipText}>🛡️ Pest Control</ThemedText>
+                    </TouchableOpacity>
+                    <TouchableOpacity style={styles.chip} onPress={() => { setTitle('Micronutrient Mix Spray'); setFrequency('bi-weekly'); setDays('28'); }}>
+                      <ThemedText style={styles.chipText}>🧪 Micro-Mix</ThemedText>
+                    </TouchableOpacity>
+                  </>
+                )}
               </ScrollView>
             </View>
 

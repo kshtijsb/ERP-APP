@@ -13,6 +13,9 @@
       "infoPlist": {
         "NSLocationWhenInUseUsageDescription": "This app uses your location to map farm boundaries and provide crop insights.",
         "NSCameraUsageDescription": "This app uses the camera to take farm and crop photos."
+      },
+      "config": {
+        "googleMapsApiKey": "AIzaSyBDXnTuvbAkFXuM-qNcBppwtu-SmtoCQko"
       }
     },
     "android": {
@@ -31,11 +34,9 @@
       ],
       "config": {
         "googleMaps": {
-          "apiKey": "YOUR_GOOGLE_MAPS_API_KEY_HERE"
+          "apiKey": "AIzaSyBDXnTuvbAkFXuM-qNcBppwtu-SmtoCQko"
         }
-      },
-      "edgeToEdgeEnabled": true,
-      "predictiveBackGestureEnabled": false
+      }
     },
     "web": {
       "output": "static",

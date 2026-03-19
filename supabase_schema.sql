@@ -166,3 +166,25 @@ CREATE TABLE IF NOT EXISTS public.schedules (
 );
 ALTER TABLE public.schedules ENABLE ROW LEVEL SECURITY;
 CREATE POLICY "Allow all public for schedules" ON public.schedules FOR ALL USING (true) WITH CHECK (true);
+
+-- 6. Prescriptions (Expert advice from staff)
+CREATE TABLE IF NOT EXISTS public.prescriptions (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    farmer_id UUID NOT NULL REFERENCES public.farmers(id) ON DELETE CASCADE,
+    prescription_text TEXT NOT NULL,
+    image_url TEXT,
+    created_at TIMESTAMPTZ DEFAULT NOW()
+);
+ALTER TABLE public.prescriptions ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "Allow all public for prescriptions" ON public.prescriptions FOR ALL USING (true) WITH CHECK (true);
+
+-- 7. Visit Requests (From Farmers to Staff)
+CREATE TABLE IF NOT EXISTS public.visit_requests (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    farmer_id UUID NOT NULL REFERENCES public.farmers(id) ON DELETE CASCADE,
+    request_text TEXT,
+    status TEXT DEFAULT 'pending', -- 'pending', 'scheduled', 'completed'
+    created_at TIMESTAMPTZ DEFAULT NOW()
+);
+ALTER TABLE public.visit_requests ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "Allow all public for visit_requests" ON public.visit_requests FOR ALL USING (true) WITH CHECK (true);

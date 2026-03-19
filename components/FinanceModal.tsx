@@ -11,11 +11,9 @@ interface FinanceModalProps {
   isVisible: boolean;
   onClose: () => void;
   farmerId: string;
-  landArea: string;
-  cropType: string;
 }
 
-export function FinanceModal({ isVisible, onClose, farmerId, landArea, cropType }: FinanceModalProps) {
+export function FinanceModal({ isVisible, onClose, farmerId }: FinanceModalProps) {
   const colorScheme = useColorScheme();
   const [amount, setAmount] = useState('');
   const [description, setDescription] = useState('');
@@ -61,17 +59,13 @@ export function FinanceModal({ isVisible, onClose, farmerId, landArea, cropType 
   };
 
   const totalExpenses = expenses.reduce((sum, e) => sum + e.amount, 0);
-  const estimatedRevenuePerAcre = cropType.toLowerCase().includes('tomato') ? 150000 : 80000;
-  const acres = parseFloat(landArea) || 1;
-  const estimatedRevenue = estimatedRevenuePerAcre * acres;
-  const roi = estimatedRevenue - totalExpenses;
 
   return (
     <Modal visible={isVisible} animationType="slide" transparent>
       <View style={styles.modalOverlay}>
         <ThemedView style={styles.modalContent}>
           <View style={styles.header}>
-            <ThemedText type="subtitle">Farm Finances & ROI</ThemedText>
+            <ThemedText type="subtitle">Farm Expense Tracker</ThemedText>
             <TouchableOpacity onPress={onClose} style={styles.closeBtn}>
               <IconSymbol name="xmark.circle.fill" size={24} color="#94A3B8" />
             </TouchableOpacity>
@@ -80,21 +74,10 @@ export function FinanceModal({ isVisible, onClose, farmerId, landArea, cropType 
           <ScrollView style={styles.body} showsVerticalScrollIndicator={false}>
             <View style={styles.roiCard}>
               <View style={styles.roiRow}>
-                <View>
-                  <ThemedText style={styles.roiLabel}>Total Expenses</ThemedText>
-                  <ThemedText style={styles.expenseValue}>₹ {totalExpenses.toLocaleString()}</ThemedText>
+                <View style={{ flex: 1, alignItems: 'center' }}>
+                  <ThemedText style={styles.roiLabel}>Total Farm Expenses</ThemedText>
+                  <ThemedText style={[styles.expenseValue, { fontSize: 32 }]}>₹ {totalExpenses.toLocaleString()}</ThemedText>
                 </View>
-                <View>
-                  <ThemedText style={styles.roiLabel}>Est. Revenue</ThemedText>
-                  <ThemedText style={styles.revenueValue}>₹ {estimatedRevenue.toLocaleString()}</ThemedText>
-                </View>
-              </View>
-              <View style={styles.roiDivider} />
-              <View style={styles.roiRow}>
-                <ThemedText style={styles.roiLabel}>Projected Net Profit</ThemedText>
-                <ThemedText style={[styles.profitValue, { color: roi >= 0 ? '#10B981' : '#EF4444' }]}>
-                  {roi >= 0 ? '+' : ''}₹ {roi.toLocaleString()}
-                </ThemedText>
               </View>
             </View>
 

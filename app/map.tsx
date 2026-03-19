@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { StyleSheet, TouchableOpacity, View, Alert, ActivityIndicator, useColorScheme } from 'react-native';
-import MapView, { Polygon, Marker } from 'react-native-maps';
+import MapView, { Polygon, Marker, UrlTile, PROVIDER_GOOGLE } from 'react-native-maps';
 import * as Location from 'expo-location';
 import { useLocalSearchParams, useRouter, Stack } from 'expo-router';
 import { supabase } from '@/lib/supabase';
@@ -217,6 +217,7 @@ export default function MapScreen() {
       <Stack.Screen options={{ title: `Mapping: ${farmerName}`, headerBackTitle: 'Back' }} />
       
       <MapView
+        provider={PROVIDER_GOOGLE}
         style={styles.map}
         initialRegion={{
           latitude: coordinates.length > 0 ? coordinates[0].latitude : location.coords.latitude,

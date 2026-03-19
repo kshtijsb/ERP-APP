@@ -1,16 +1,29 @@
 import React, { useState, useEffect } from 'react';
-import { StyleSheet, View, ScrollView, ActivityIndicator, Alert, TouchableOpacity, useColorScheme, Image, Linking, Platform } from 'react-native';
+import { StyleSheet, View, ScrollView, ActivityIndicator, Alert, TouchableOpacity, useColorScheme, Image, Linking, Platform, TextInput } from 'react-native';
 import { useLocalSearchParams, useRouter, Stack } from 'expo-router';
 import { ActionSheetProvider, useActionSheet } from '@expo/react-native-action-sheet';
 import { useTranslation } from '@/context/language-context';
-import MapView, { Polygon, Overlay } from 'react-native-maps';
+import MapView, { Polygon, Overlay, UrlTile, PROVIDER_GOOGLE } from 'react-native-maps';
 import { supabase } from '@/lib/supabase';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { Colors } from '@/constants/theme';
-import { fetchNDVIOverlay, getHealthColor } from '@/lib/satellite-service';
-import { getFarmerLocalById, deleteLocalRecordGeneric, getFieldNotesByFarmerId, getSoilHealthByFarmerId, getVisitLogsByFarmerId, saveVisitLogOffline, getTreatmentLogsByFarmerId, getActiveSchedulesByFarmerId, updateScheduleStatus, saveTreatmentLogOffline } from '@/lib/offline-db';
+import * as ImagePicker from 'expo-image-picker';
+import { 
+  getFarmerLocalById, 
+  deleteLocalRecordGeneric, 
+  getFieldNotesByFarmerId, 
+  getSoilHealthByFarmerId, 
+  getVisitLogsByFarmerId, 
+  saveVisitLogOffline, 
+  getTreatmentLogsByFarmerId, 
+  getActiveSchedulesByFarmerId, 
+  updateScheduleStatus, 
+  saveTreatmentLogOffline, 
+  getPrescriptionsByFarmerId, 
+  savePrescriptionOffline 
+} from '@/lib/offline-db';
 import { syncOfflineData } from '@/lib/sync-engine';
 import { useAuth } from '@/context/auth-context';
 import { FieldNotesModal } from '@/components/FieldNotesModal';
@@ -18,6 +31,7 @@ import { SoilHealthModal } from '@/components/SoilHealthModal';
 import { AiAdvisorModal } from '@/components/AiAdvisorModal';
 import { TreatmentModal } from '@/components/TreatmentModal';
 import { ScheduleModal } from '@/components/ScheduleModal';
+import { PrescriptionModal } from '@/components/PrescriptionModal';
 import { fetchAndCacheWeather, parseWeatherData } from '@/lib/weather-service';
 import { getVariety } from '@/constants/crops';
 import { predictiveRiskAnalysis } from '@/lib/ai-advisor-service';
@@ -30,13 +44,12 @@ export default function FarmerDetailsScreen() {
   const { role } = useAuth();
   const [farmer, setFarmer] = useState<any>(null);
   const [loading, setLoading] = useState(true);
-  const [analyzing, setAnalyzing] = useState(false);
-  const [healthData, setHealthData] = useState<any>(null);
   const [isNotesModalVisible, setIsNotesModalVisible] = useState(false);
   const [isSoilModalVisible, setIsSoilModalVisible] = useState(false);
   const [isAiModalVisible, setIsAiModalVisible] = useState(false);
   const [isTreatmentModalVisible, setIsTreatmentModalVisible] = useState(false);
   const [isScheduleModalVisible, setIsScheduleModalVisible] = useState(false);
+  const [isPrescriptionModalVisible, setIsPrescriptionModalVisible] = useState(false);
   const [activities, setActivities] = useState<any[]>([]);
   const [weather, setWeather] = useState<any>(null);
   const [fetchingWeather, setFetchingWeather] = useState(false);
@@ -88,12 +101,14 @@ export default function FarmerDetailsScreen() {
       const localVisits = await getVisitLogsByFarmerId(farmerId);
       const localTreatmentLogs = await getTreatmentLogsByFarmerId(farmerId);
       const localSchedules = await getActiveSchedulesByFarmerId(farmerId);
+      const localPrescriptions = await getPrescriptionsByFarmerId(farmerId);
 
       let allNotes = [...localNotes];
       let allSoil = [...localSoilHealth];
       let allVisits = [...localVisits];
       let allTreatments = [...localTreatmentLogs];
       let allSchedules = [...localSchedules];
+      let allPrescriptions = [...localPrescriptions];
 
       // 2. Fetch Online Activities (if not local ID)
       if (!farmerId.startsWith('local_')) {
@@ -126,14 +141,26 @@ export default function FarmerDetailsScreen() {
           const keys = new Set(allSchedules.map(s => `${s.title}_${s.start_date}`));
           remoteSchedules.forEach(rs => { if (!keys.has(`${rs.title}_${rs.start_date}`)) allSchedules.push(rs); });
         }
+
+        const { data: remotePrescriptions } = await supabase.from('prescriptions').select('*').eq('farmer_id', farmerId);
+        if (remotePrescriptions) {
+          const keys = new Set(allPrescriptions.map(p => `${p.prescription_text}_${p.created_at}`));
+          remotePrescriptions.forEach(rp => { if (!keys.has(`${rp.prescription_text}_${rp.created_at}`)) allPrescriptions.push(rp); });
+        }
+
+        const { data: remoteVisitRequests } = await supabase.from('visit_requests').select('*').eq('farmer_id', farmerId);
+        if (remoteVisitRequests) {
+          allVisits = [...allVisits, ...remoteVisitRequests.map(vr => ({ ...vr, type: 'visit_request' }))];
+        }
       }
 
       const combined = [
-        ...allNotes.map(n => ({ ...n, type: 'note' as const })),
-        ...allSoil.map(s => ({ ...s, type: 'soil' as const })),
-        ...allVisits.map(v => ({ ...v, type: 'visit' as const })),
-        ...allTreatments.map(t => ({ ...t, type: 'treatment' as const })),
-        ...allSchedules.map(s => ({ ...s, type: 'schedule' as const }))
+        ...allNotes.map(n => ({ ...n, type: (n as any).type || 'note' as const })),
+        ...allSoil.map(s => ({ ...s, type: (s as any).type || 'soil' as const })),
+        ...allVisits.map(v => ({ ...v, type: (v as any).type || 'visit' as const })),
+        ...allTreatments.map(t => ({ ...t, type: (t as any).type || 'treatment' as const })),
+        ...allSchedules.map(s => ({ ...s, type: (s as any).type || 'schedule' as const })),
+        ...allPrescriptions.map(p => ({ ...p, type: (p as any).type || 'prescription' as const }))
       ].sort((a: any, b: any) => {
         const dateA = new Date(a.created_at || a.visit_date || a.application_date || a.start_date).getTime();
         const dateB = new Date(b.created_at || b.visit_date || b.application_date || b.start_date).getTime();
@@ -266,25 +293,6 @@ export default function FarmerDetailsScreen() {
   const parsedBoundary = getParsedBoundary(farm?.boundary);
   const hasMap = parsedBoundary && parsedBoundary.length > 0;
 
-  const runHealthAnalysis = async () => {
-    if (!hasMap) return;
-    setAnalyzing(true);
-    try {
-      const data = await fetchNDVIOverlay(parsedBoundary, farmer.id);
-      setHealthData(data);
-    } catch (e) {
-      console.error('Analysis error:', e);
-    } finally {
-      setAnalyzing(false);
-    }
-  };
-
-  useEffect(() => {
-    if (farmer && hasMap) {
-      runHealthAnalysis();
-    }
-  }, [farmer, hasMap]);
-
   if (loading) {
     return (
       <View style={[styles.center, { backgroundColor: Colors[colorScheme ?? 'light'].background }]}>
@@ -305,28 +313,6 @@ export default function FarmerDetailsScreen() {
         longitudeDelta: 0.005,
       }
     : null;
-
-  const handleShareReport = () => {
-    if (!farmer || !healthData) return;
-
-    const message = `🌱 *${t('healthReportTitle')}* 🌱\n\n` +
-      `*${t('farmerLabel')}:* ${farmer.name}\n` +
-      `*${t('plotID')}:* ${farmer.id.toString().slice(0, 8).toUpperCase()}\n` +
-      `*${t('vegIndex')}:* ${healthData.status} (${Math.round(healthData.healthScore * 100)}%)\n` +
-      `*${t('statusLabel')}:* ${healthData.isProduction ? (locale === 'en' ? 'Live Satellite Verified' : 'थेट सॅटेलाइट द्वारे सत्यापित') : (locale === 'en' ? 'Field Analysis Done' : 'क्षेत्र विश्लेषण पूर्ण झाले')}\n` +
-      `*${t('lastScan')}:* ${healthData.lastUpdated}\n\n` +
-      `_${t('downloadAppNotice')}_`;
-
-    const whatsappUrl = `whatsapp://send?phone=${farmer.phone_number}&text=${encodeURIComponent(message)}`;
-    
-    Linking.canOpenURL(whatsappUrl).then(supported => {
-      if (supported) {
-        Linking.openURL(whatsappUrl);
-      } else {
-        Alert.alert('Error', 'WhatsApp is not installed on this device.');
-      }
-    });
-  };
 
   const handleSharePrescription = async () => {
     if (!farmer) return;
@@ -521,6 +507,7 @@ export default function FarmerDetailsScreen() {
             })}
           >
             <MapView
+              provider={PROVIDER_GOOGLE}
               style={styles.map}
               initialRegion={initialRegion!}
               mapType="hybrid"
@@ -533,13 +520,6 @@ export default function FarmerDetailsScreen() {
                 strokeColor="#22C55E"
                 strokeWidth={3}
               />
-              {healthData?.overlay?.image && (
-                <Overlay 
-                  image={{ uri: healthData.overlay.image }}
-                  bounds={healthData.overlay.bounds}
-                  opacity={0.6}
-                />
-              )}
             </MapView>
             <View style={styles.mapBadge}>
               <IconSymbol 
@@ -582,66 +562,27 @@ export default function FarmerDetailsScreen() {
         <View style={styles.grid}>
           <InfoCard label={t('contactNumber')} value={farmer.phone_number || 'Not provided'} icon="phone.fill" color="#3B82F6" />
           <InfoCard label={t('landArea')} value={farmer.land_area ? `${farmer.land_area} Acres` : 'Not specified'} icon="square.dashed" color="#F59E0B" />
-          <InfoCard label={t('selectCrop')} value={farmer.variety ? `${farmer.crop_type} (${farmer.variety})` : (farmer.crop_type || 'Direct entry pending')} icon="leaf.fill" color="#10B981" />
           <InfoCard label={t('cycleDuration')} value={farmer.crop_duration || 'Unknown'} icon="calendar" color="#8B5CF6" />
         </View>
-      </View>
 
-      <View style={styles.section}>
-        <View style={styles.sectionHeader}>
-          <ThemedText style={styles.sectionTitle}>{t('satelliteHealth')}</ThemedText>
-          {analyzing && <ActivityIndicator size="small" color={Colors[colorScheme ?? 'light'].tint} />}
-        </View>
-        
-        {healthData ? (
-          <ThemedView style={[styles.healthCard, { backgroundColor: Colors[colorScheme ?? 'light'].card }]}>
-            <View style={styles.healthRow}>
-              <View style={[styles.healthIndicator, { backgroundColor: getHealthColor(healthData.healthScore) }]} />
-              <View style={styles.healthTextCol}>
-                <View style={styles.healthHeaderRow}>
-                  <ThemedText style={styles.healthStatusLabel}>
-                    {t('vegIndex')}: <ThemedText style={{ color: getHealthColor(healthData.healthScore), fontWeight: '900' }}>{healthData.status}</ThemedText>
+        {/* Multi-Crop List */}
+        <View style={styles.cropListContainer}>
+          <ThemedText style={styles.cropListTitle}>Registered Crops</ThemedText>
+          <View style={styles.cropBadgeRow}>
+            {farmer.crop_type?.split(', ').map((crop: string, idx: number) => {
+              const varieties = farmer.variety?.split(', ') || [];
+              const variety = varieties[idx] || 'General';
+              return (
+                <View key={idx} style={[styles.modernCropBadge, { backgroundColor: Colors[colorScheme ?? 'light'].tint + '10', borderColor: Colors[colorScheme ?? 'light'].tint + '30' }]}>
+                  <IconSymbol name="leaf.fill" size={14} color={Colors[colorScheme ?? 'light'].tint} />
+                  <ThemedText style={[styles.modernCropText, { color: colorScheme === 'dark' ? '#fff' : '#1E293B' }]}>
+                    {crop} <ThemedText style={styles.modernVarietyText}>({variety})</ThemedText>
                   </ThemedText>
-                  <View style={[styles.liveBadge, { backgroundColor: healthData.isProduction ? '#10B98120' : '#64748B20' }]}>
-                    <ThemedText style={[styles.liveBadgeText, { color: healthData.isProduction ? '#10B981' : '#64748B' }]}>
-                      {healthData.isProduction ? 'LIVE SAT' : 'MOCK'}
-                    </ThemedText>
-                  </View>
                 </View>
-                <ThemedText style={styles.healthSub}>{t('lastScan')}: {healthData.lastUpdated}</ThemedText>
-              </View>
-              <ThemedText style={styles.healthPercentage}>{Math.round(healthData.healthScore * 100)}%</ThemedText>
-            </View>
-            <ThemedText style={styles.healthDescription}>
-              {t('satelliteAnalysis')}
-              {healthData.isProduction 
-                ? ` ${t('realTimeNotice')}`
-                : ' (Simulation mode based on seeded geographic data)'}
-            </ThemedText>
-          </ThemedView>
-        ) : (
-          <View style={styles.pendingAnalysis}>
-            <IconSymbol name="eye.fill" size={24} color="#94A3B8" />
-            <ThemedText style={styles.pendingText}>{analyzing ? t('scanningSatellite') : t('mapToEnable')}</ThemedText>
+              );
+            })}
           </View>
-        )}
-      </View>
-
-      <View style={styles.section}>
-        <View style={styles.sectionHeader}>
-          <ThemedText style={styles.sectionTitle}>{t('marketingSharing')}</ThemedText>
         </View>
-        <TouchableOpacity 
-          style={[styles.shareCard, { backgroundColor: '#25D366' + '15', borderColor: '#25D366' }]}
-          onPress={handleShareReport}
-        >
-          <IconSymbol name="paperplane.fill" size={24} color="#128C7E" />
-          <View style={{ flex: 1 }}>
-            <ThemedText style={styles.shareTitle}>{t('shareWithFarmer')}</ThemedText>
-            <ThemedText style={styles.shareSub}>{t('sendWhatsApp')}</ThemedText>
-          </View>
-          <IconSymbol name="chevron.right" size={16} color="#128C7E" />
-        </TouchableOpacity>
       </View>
 
       <View style={styles.actionSection}>
@@ -690,6 +631,14 @@ export default function FarmerDetailsScreen() {
           <ThemedText style={[styles.quickVisitButtonText, { color: '#6366F1' }]}>
             {t('logQuickVisit')}
           </ThemedText>
+        </TouchableOpacity>
+
+        <TouchableOpacity 
+          style={styles.addPrescriptionButton}
+          onPress={() => setIsPrescriptionModalVisible(true)}
+        >
+          <IconSymbol name="pills.fill" size={20} color="#6366F1" />
+          <ThemedText style={styles.addPrescriptionText}>Add Field Prescription</ThemedText>
         </TouchableOpacity>
 
         <TouchableOpacity 
@@ -826,13 +775,19 @@ export default function FarmerDetailsScreen() {
         farmerId={typeof id === 'string' ? id : ''}
         onSave={fetchActivities}
       />
-
       <ScheduleModal
         visible={isScheduleModalVisible}
         onClose={() => setIsScheduleModalVisible(false)}
         farmerId={typeof id === 'string' ? id : ''}
         onSuccess={fetchActivities}
         currentWeather={weather}
+      />
+
+      <PrescriptionModal
+        isVisible={isPrescriptionModalVisible}
+        onClose={() => setIsPrescriptionModalVisible(false)}
+        farmerId={typeof id === 'string' ? id : ''}
+        onSave={fetchActivities}
       />
     </ScrollView>
   );
@@ -848,6 +803,8 @@ function ActivityItem({ activity, isLast }: { activity: any; isLast: boolean }) 
       case 'visit': return 'person.fill.checkmark';
       case 'treatment': return 'pencil';
       case 'schedule': return 'calendar';
+      case 'prescription': return 'pills.fill';
+      case 'visit_request': return 'megaphone.fill';
       default: return 'circle.fill';
     }
   };
@@ -859,6 +816,8 @@ function ActivityItem({ activity, isLast }: { activity: any; isLast: boolean }) 
       case 'visit': return '#6366F1';
       case 'treatment': return '#22C55E';
       case 'schedule': return '#8B5CF6';
+      case 'prescription': return '#6366F1';
+      case 'visit_request': return '#F59E0B';
       default: return '#94A3B8';
     }
   };
@@ -874,22 +833,42 @@ function ActivityItem({ activity, isLast }: { activity: any; isLast: boolean }) 
   return (
     <View style={styles.activityItem}>
       <View style={styles.activityLeft}>
-        <View style={[styles.activityIcon, { backgroundColor: getColor() + '15' }]}>
-          <IconSymbol name={getIcon()} size={14} color={getColor()} />
+        <View style={[styles.activityIcon, { backgroundColor: activity.type === 'prescription' ? '#6366F1' : getColor() + '15' }]}>
+          <IconSymbol name={getIcon() as any} size={14} color={activity.type === 'prescription' ? '#fff' : getColor()} />
         </View>
         {!isLast && <View style={styles.activityLine} />}
       </View>
       <View style={styles.activityRight}>
         <ThemedText style={styles.activityDate}>{formattedDate}</ThemedText>
+        {activity.type === 'prescription' && (
+          <View style={[styles.prescriptionBadge, { marginBottom: 6 }]}>
+            <ThemedText style={styles.prescriptionBadgeText}>Expert Prescription</ThemedText>
+          </View>
+        )}
         <ThemedText style={styles.activityContent}>
           {activity.type === 'note' && activity.note}
           {activity.type === 'soil' && `Soil Test: pH ${activity.ph}, N: ${activity.nitrogen}, P: ${activity.phosphorus}, K: ${activity.potassium}`}
+          {activity.type === 'visit' && (activity.purpose || 'Field Visit Conducted')}
+          {activity.type === 'treatment' && `Applied: ${activity.product_name} (${activity.quantity})`}
+          {activity.type === 'schedule' && `Task: ${activity.title} (${activity.type})`}
+          {activity.type === 'prescription' && activity.prescription_text}
+          {activity.type === 'visit_request' && (
+            <View>
+              <ThemedText style={{ fontWeight: '700', color: '#B45309' }}>Requested Field Visit</ThemedText>
+              <ThemedText style={{ marginTop: 4 }}>Reason: {activity.request_text || 'No reason provided'}</ThemedText>
+              <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 4 }}>
+                <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: '#F59E0B', marginRight: 6 }} />
+                <ThemedText style={{ fontSize: 12, color: '#92400E', fontWeight: '600' }}>Status: {activity.status}</ThemedText>
+              </View>
+            </View>
+          )}
           {activity.type === 'visit' && activity.purpose}
           {activity.type === 'treatment' && `Input Application: ${activity.product_name} (${activity.quantity || 'Quantity not specified'})`}
           {activity.type === 'schedule' && `New Schedule: ${activity.title} (${activity.frequency})`}
+          {activity.type === 'prescription' && activity.prescription_text}
         </ThemedText>
-        {activity.image_uri && (
-          <Image source={{ uri: activity.image_uri }} style={styles.activityImage} />
+        {(activity.image_uri || activity.image_url) && (
+          <Image source={{ uri: activity.image_uri || activity.image_url }} style={styles.activityImage} />
         )}
       </View>
     </View>
@@ -904,8 +883,8 @@ function InfoCard({ label, value, icon, color }: { label: string; value: string;
         <IconSymbol name={icon} size={18} color={color} />
       </View>
       <View style={styles.cardText}>
-        <ThemedText style={styles.cardLabel}>{label}</ThemedText>
-        <ThemedText type="defaultSemiBold" style={styles.cardValue}>{value}</ThemedText>
+        <ThemedText style={styles.cardLabel} numberOfLines={1}>{label}</ThemedText>
+        <ThemedText type="defaultSemiBold" style={styles.cardValue} numberOfLines={1} adjustsFontSizeToFit>{value}</ThemedText>
       </View>
     </View>
   );
@@ -1516,5 +1495,145 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     gap: 15,
+  },
+  cropListContainer: {
+    marginTop: 15,
+    paddingTop: 15,
+    borderTopWidth: 1,
+    borderTopColor: '#F1F5F9',
+  },
+  cropListTitle: {
+    fontSize: 14,
+    fontWeight: '800',
+    color: '#64748B',
+    marginBottom: 10,
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+  },
+  cropBadgeRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+  modernCropBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 8,
+    borderWidth: 1,
+    gap: 6,
+  },
+  modernCropText: {
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  modernVarietyText: {
+    fontSize: 12,
+    fontWeight: '500',
+    color: '#64748B',
+  },
+  addPrescriptionButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 14,
+    borderRadius: 16,
+    backgroundColor: '#EEF2FF',
+    borderWidth: 1.5,
+    borderColor: '#6366F1',
+    gap: 10,
+    marginBottom: 15,
+  },
+  addPrescriptionText: {
+    color: '#6366F1',
+    fontSize: 15,
+    fontWeight: '800',
+  },
+  prescriptionBadge: {
+    backgroundColor: '#6366F1',
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 6,
+    marginBottom: 4,
+    alignSelf: 'flex-start',
+  },
+  prescriptionBadgeText: {
+    color: '#fff',
+    fontSize: 10,
+    fontWeight: '800',
+    textTransform: 'uppercase',
+  },
+  modalContainer: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    justifyContent: 'flex-end',
+  },
+  modalContent: {
+    backgroundColor: '#fff',
+    borderTopLeftRadius: 32,
+    borderTopRightRadius: 32,
+    padding: 24,
+    maxHeight: '90%',
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 24,
+  },
+  modalTitle: {
+    fontSize: 20,
+    fontWeight: '900',
+  },
+  prescriptionInput: {
+    borderWidth: 1.5,
+    borderColor: '#E2E8F0',
+    borderRadius: 16,
+    padding: 16,
+    fontSize: 16,
+    minHeight: 120,
+    textAlignVertical: 'top',
+    marginBottom: 20,
+  },
+  photoSelector: {
+    height: 200,
+    borderRadius: 20,
+    borderWidth: 2,
+    borderStyle: 'dashed',
+    borderColor: '#CBD5E1',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 24,
+    overflow: 'hidden',
+  },
+  previewImage: {
+    width: '100%',
+    height: '100%',
+  },
+  photoSelectorText: {
+    marginTop: 8,
+    fontSize: 14,
+    color: '#64748B',
+    fontWeight: '600',
+  },
+  submitButton: {
+    height: 56,
+    borderRadius: 16,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  submitButtonText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: '800',
+  },
+  label: {
+    fontSize: 12,
+    fontWeight: '800',
+    color: '#64748B',
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+    marginBottom: 8,
   },
 });

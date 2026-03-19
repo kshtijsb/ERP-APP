@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { StyleSheet, View, ScrollView, TextInput, TouchableOpacity, Alert, ActivityIndicator, useColorScheme, Platform, RefreshControl } from 'react-native';
+import { StyleSheet, View, ScrollView, TextInput, TouchableOpacity, Alert, ActivityIndicator, useColorScheme, Platform, RefreshControl, Image, Modal } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Stack, useRouter } from 'expo-router';
@@ -14,10 +14,13 @@ import {
   getSoilHealthByFarmerId, 
   getVisitLogsByFarmerId, 
   getFarmerLocalByPhone, 
-  TreatmentLog, 
   getTreatmentLogsByFarmerId,
   getActiveSchedulesByFarmerId,
-  Schedule
+  Schedule,
+  getPrescriptionsByFarmerId,
+  getVisitRequestsByFarmerId,
+  saveVisitRequestOffline,
+  saveFarmerSelfOffline
 } from '@/lib/offline-db';
 import { supabase } from '@/lib/supabase';
 import { fetchAndCacheWeather } from '@/lib/weather-service';
@@ -42,6 +45,22 @@ export default function FarmerPortalScreen() {
   const [activeTab, setActiveTab] = useState<'insights' | 'plan' | 'history'>('insights');
   const [refreshing, setRefreshing] = useState(false);
   const [isFinanceModalVisible, setIsFinanceModalVisible] = useState(false);
+  const [updates, setUpdates] = useState<any[]>([]);
+  
+  // Registration State
+  const [isRegistering, setIsRegistering] = useState(false);
+  const [regName, setRegName] = useState('');
+  const [regPhone, setRegPhone] = useState('');
+  const [regAddress, setRegAddress] = useState('');
+  const [selectedCrops, setSelectedCrops] = useState<{name: string, variety: string}[]>([]);
+  const [availableCrops] = useState(['Tomato', 'Cotton', 'Sugarcane', 'Soybean', 'Strawberry', 'Grapes', 'Pomegranate', 'Onion', 'Rice', 'Wheat', 'Maize']);
+  const [currentCrop, setCurrentCrop] = useState('Tomato');
+  const [currentVariety, setCurrentVariety] = useState('');
+
+  // Visit Request State
+  const [isVisitModalVisible, setIsVisitModalVisible] = useState(false);
+  const [visitText, setVisitText] = useState('');
+  const [savingVisit, setSavingVisit] = useState(false);
 
   const handleLogin = async () => {
     const cleanPhone = phone.replace(/\D/g, '');
@@ -103,6 +122,94 @@ export default function FarmerPortalScreen() {
     setRefreshing(false);
   };
 
+  const handleRegistration = async () => {
+    if (!regName.trim() || !regPhone.trim()) {
+      Alert.alert('Error', 'Name and Phone are required');
+      return;
+    }
+
+    if (selectedCrops.length === 0) {
+      Alert.alert('Error', 'Please add at least one crop');
+      return;
+    }
+
+    setLoading(true);
+    try {
+      const cleanPhone = regPhone.replace(/\D/g, '');
+      const cropTypeString = [...new Set(selectedCrops.map(c => c.name))].join(', ');
+      const varietyString = selectedCrops.map(c => `${c.name}: ${c.variety}`).join('; ');
+
+      const localId = await saveFarmerSelfOffline({
+        name: regName,
+        phone_number: cleanPhone,
+        address: regAddress,
+        crop_type: cropTypeString,
+        variety: varietyString
+      });
+
+      const farmerObj = {
+        id: `local_${localId}`,
+        name: regName,
+        phone_number: cleanPhone,
+        address: regAddress,
+        crop_type: cropTypeString,
+        variety: varietyString
+      };
+
+      setFarmer(farmerObj);
+      setIsAuthenticated(true);
+      setIsRegistering(false);
+      await fetchFarmerData(farmerObj.id, cropTypeString);
+      Alert.alert('Success', 'Account created! Your data will sync when online.');
+    } catch (e) {
+      console.error('Registration Error:', e);
+      Alert.alert('Error', 'Failed to create account');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleRequestVisit = async () => {
+    if (!visitText.trim()) {
+      Alert.alert('Error', 'Please describe why you need a visit');
+      return;
+    }
+
+    setSavingVisit(true);
+    try {
+      await saveVisitRequestOffline({
+        farmer_id: farmer.id,
+        request_text: visitText
+      });
+      setVisitText('');
+      setIsVisitModalVisible(false);
+      fetchFarmerData(farmer.id, farmer.crop_type);
+      Alert.alert('Success', 'Visit requested! Staff will be notified.');
+    } catch (e) {
+      console.error('Visit Request Error:', e);
+      Alert.alert('Error', 'Failed to submit request');
+    } finally {
+      setSavingVisit(false);
+    }
+  };
+
+  const addCrop = () => {
+    if (!currentVariety.trim()) {
+      Alert.alert('Variety Required', 'Please enter the variety name for this crop.');
+      return;
+    }
+    if (selectedCrops.find(c => c.name === currentCrop && c.variety === currentVariety)) {
+      Alert.alert('Already Added', 'This variety of ' + currentCrop + ' is already in your list.');
+      return;
+    }
+    setSelectedCrops([...selectedCrops, { name: currentCrop, variety: currentVariety }]);
+    setCurrentVariety('');
+  };
+
+  const removeCrop = (name: string, variety: string) => {
+    setSelectedCrops(selectedCrops.filter(c => c.name !== name || c.variety !== variety));
+  };
+
   const fetchFarmerData = async (farmerId: string, cropType: string) => {
     try {
       // 1. Get Real-time Location/Coordinates
@@ -129,6 +236,8 @@ export default function FarmerPortalScreen() {
       let allSoil: any[] = [];
       let allVisits: any[] = [];
       let allTreatments: any[] = [];
+      let allPrescriptions: any[] = [];
+      let allVisitRequests: any[] = [];
 
       // A. Try Online Fetch for activities if possible
       if (!farmerId.startsWith('local_')) {
@@ -143,6 +252,12 @@ export default function FarmerPortalScreen() {
 
         const { data: remoteTreatments } = await supabase.from('treatment_logs').select('*').eq('farmer_id', farmerId);
         if (remoteTreatments) allTreatments = [...remoteTreatments];
+
+        const { data: remotePrescriptions } = await supabase.from('prescriptions').select('*').eq('farmer_id', farmerId);
+        if (remotePrescriptions) allPrescriptions = [...remotePrescriptions];
+
+        const { data: remoteVisitRequests } = await supabase.from('visit_requests').select('*').eq('farmer_id', farmerId);
+        if (remoteVisitRequests) allVisitRequests = [...remoteVisitRequests];
       }
 
       // B. Fetch Local Activities
@@ -150,6 +265,8 @@ export default function FarmerPortalScreen() {
       const localSoil = await getSoilHealthByFarmerId(farmerId);
       const localVisits = await getVisitLogsByFarmerId(farmerId);
       const localTreatments = await getTreatmentLogsByFarmerId(farmerId);
+      const localPrescriptions = await getPrescriptionsByFarmerId(farmerId);
+      const localVisitRequests = await getVisitRequestsByFarmerId(farmerId);
       
       // Merge unique records (heuristic: combine note text/date or product/date)
       const noteKeys = new Set(allNotes.map(n => `${n.note}_${n.created_at}`));
@@ -164,12 +281,20 @@ export default function FarmerPortalScreen() {
       const treatmentKeys = new Set(allTreatments.map(t => `${t.product_name}_${t.application_date}`));
       localTreatments.forEach(lt => { if (!treatmentKeys.has(`${lt.product_name}_${lt.application_date}`)) allTreatments.push(lt); });
 
+      const prescriptionKeys = new Set(allPrescriptions.map(p => `${p.prescription_text}_${p.created_at}`));
+      localPrescriptions.forEach(lp => { if (!prescriptionKeys.has(`${lp.prescription_text}_${lp.created_at}`)) allPrescriptions.push(lp); });
+
+      const visitReqKeys = new Set(allVisitRequests.map(vr => `${vr.request_text}_${vr.created_at}`));
+      localVisitRequests.forEach(lvr => { if (!visitReqKeys.has(`${lvr.request_text}_${lvr.created_at}`)) allVisitRequests.push(lvr); });
+
       // C. Safe Merge & Sort
       const combined = [
         ...allNotes.map(n => ({ ...n, type: 'note' as const })),
         ...allSoil.map(s => ({ ...s, type: 'soil' as const })),
         ...allVisits.map(v => ({ ...v, type: 'visit' as const })),
-        ...allTreatments.map(t => ({ ...t, type: 'treatment' as const }))
+        ...allTreatments.map(t => ({ ...t, type: 'treatment' as const })),
+        ...allPrescriptions.map(p => ({ ...p, type: 'prescription' as const })),
+        ...allVisitRequests.map(vr => ({ ...vr, type: 'visit_request' as const }))
       ].sort((a: any, b: any) => {
         const dateA = new Date(a.created_at || a.visit_date || a.application_date).getTime();
         const dateB = new Date(b.created_at || b.visit_date || b.application_date).getTime();
@@ -222,6 +347,19 @@ export default function FarmerPortalScreen() {
       const analysis = predictiveRiskAnalysis(realTimeWeather, cropType || 'Tomato');
       setRisks(analysis.risks);
 
+      // Fetch Targeted Broadcast Updates
+      try {
+        const { data: remoteUpdates } = await supabase
+          .from('updates')
+          .select('*')
+          .or(`target_crop.eq.All,target_crop.eq.${cropType}`)
+          .order('created_at', { ascending: false })
+          .limit(5);
+        if (remoteUpdates) setUpdates(remoteUpdates);
+      } catch (err) {
+        console.warn('Failed to fetch updates:', err);
+      }
+
     } catch (e) {
       console.error('Data Fetch Error:', e);
     }
@@ -238,35 +376,148 @@ export default function FarmerPortalScreen() {
             {locale === 'en' ? 'मराठी' : 'English'}
           </ThemedText>
         </TouchableOpacity>
-        <Stack.Screen options={{ title: 'Farmer Access', headerShown: false }} />
-        <View style={styles.loginHeader}>
-          <IconSymbol name="leaf.fill" size={60} color={Colors[colorScheme ?? 'light'].tint} />
-          <ThemedText type="title" style={styles.loginTitle}>{t('myFarmPortal')}</ThemedText>
-          <ThemedText style={styles.loginSub}>{t('farmerLoginSub')}</ThemedText>
-        </View>
-
-        <View style={styles.inputCard}>
-          <ThemedText style={styles.label}>{t('phone')}</ThemedText>
-          <TextInput
-            style={[styles.input, { color: Colors[colorScheme ?? 'light'].text, borderColor: Colors[colorScheme ?? 'light'].border }]}
-            placeholder="e.g. 9876543210"
-            placeholderTextColor="#94A3B8"
-            keyboardType="phone-pad"
-            value={phone}
-            onChangeText={setPhone}
-          />
-          <TouchableOpacity 
-            style={[styles.loginButton, { backgroundColor: Colors[colorScheme ?? 'light'].tint }]} 
-            onPress={handleLogin}
-            disabled={loading}
-          >
-            {loading ? <ActivityIndicator color="#fff" /> : <ThemedText style={styles.loginButtonText}>{t('accessMyFarm')}</ThemedText>}
-          </TouchableOpacity>
-        </View>
+        <Stack.Screen options={{ title: isRegistering ? 'Farmer Registration' : 'Farmer Access', headerShown: false }} />
         
-        <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
-          <ThemedText style={{ color: '#94A3B8' }}>{t('returnToShop')}</ThemedText>
-        </TouchableOpacity>
+        <ScrollView contentContainerStyle={{ paddingBottom: 40 }} showsVerticalScrollIndicator={false} style={{ width: '100%' }}>
+          <View style={styles.loginHeader}>
+            <IconSymbol name="leaf.fill" size={60} color={Colors[colorScheme ?? 'light'].tint} />
+            <ThemedText type="title" style={styles.loginTitle}>
+              {isRegistering ? t('createFarmAccount') : t('myFarmPortal')}
+            </ThemedText>
+            <ThemedText style={styles.loginSub}>
+              {isRegistering ? t('regHeaderSub') : t('farmerLoginSub')}
+            </ThemedText>
+          </View>
+
+          <View style={styles.inputCard}>
+            {isRegistering ? (
+              <>
+                <ThemedText style={styles.label}>{t('fullName')}</ThemedText>
+                <TextInput
+                  style={[styles.input, { color: Colors[colorScheme ?? 'light'].text, borderColor: Colors[colorScheme ?? 'light'].border }]}
+                  placeholder={t('fullName')}
+                  placeholderTextColor="#94A3B8"
+                  value={regName}
+                  onChangeText={setRegName}
+                />
+
+                <ThemedText style={styles.label}>{t('phone')}</ThemedText>
+                <TextInput
+                  style={[styles.input, { color: Colors[colorScheme ?? 'light'].text, borderColor: Colors[colorScheme ?? 'light'].border }]}
+                  placeholder="e.g. 9876543210"
+                  placeholderTextColor="#94A3B8"
+                  keyboardType="phone-pad"
+                  value={regPhone}
+                  onChangeText={setRegPhone}
+                />
+
+                <ThemedText style={styles.label}>{t('villageAddress')}</ThemedText>
+                <TextInput
+                  style={[styles.input, { color: Colors[colorScheme ?? 'light'].text, borderColor: Colors[colorScheme ?? 'light'].border }]}
+                  placeholder={t('enterVillage')}
+                  placeholderTextColor="#94A3B8"
+                  value={regAddress}
+                  onChangeText={setRegAddress}
+                />
+
+                <View style={styles.divider} />
+
+                <ThemedText style={[styles.label, { marginBottom: 15 }]}>{t('addCropsVarieties')}</ThemedText>
+                
+                <View style={styles.cropSelectorRow}>
+                  <View style={{ flex: 1 }}>
+                    <ThemedText style={styles.smallLabel}>{t('selectCrop')}</ThemedText>
+                    <View style={styles.pickerContainer}>
+                      <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ paddingVertical: 10 }}>
+                        {availableCrops.map(crop => (
+                          <TouchableOpacity 
+                            key={crop} 
+                            onPress={() => setCurrentCrop(crop)}
+                            style={[styles.cropChip, currentCrop === crop && { backgroundColor: Colors[colorScheme ?? 'light'].tint, borderColor: Colors[colorScheme ?? 'light'].tint }]}
+                          >
+                            <ThemedText style={[styles.cropChipText, currentCrop === crop && { color: '#fff' }]}>{crop}</ThemedText>
+                          </TouchableOpacity>
+                        ))}
+                      </ScrollView>
+                    </View>
+                  </View>
+                </View>
+
+                <View style={{ marginBottom: 20 }}>
+                  <ThemedText style={styles.smallLabel}>{t('varietyName')}</ThemedText>
+                  <View style={{ flexDirection: 'row', gap: 10 }}>
+                    <TextInput
+                      style={[styles.input, { flex: 1, marginBottom: 0, color: Colors[colorScheme ?? 'light'].text, borderColor: Colors[colorScheme ?? 'light'].border }]}
+                      placeholder={t('enterVariety')}
+                      placeholderTextColor="#94A3B8"
+                      value={currentVariety}
+                      onChangeText={setCurrentVariety}
+                    />
+                    <TouchableOpacity style={styles.addCropBtn} onPress={addCrop}>
+                      <IconSymbol name="plus" size={20} color="#fff" />
+                    </TouchableOpacity>
+                  </View>
+                </View>
+
+                {selectedCrops.length > 0 && (
+                  <View style={styles.selectedCropsList}>
+                    {selectedCrops.map((item, idx) => (
+                      <View key={idx} style={styles.selectedCropItem}>
+                        <View>
+                          <ThemedText style={styles.selectedCropName}>{item.name}</ThemedText>
+                          <ThemedText style={styles.selectedCropVariety}>{item.variety}</ThemedText>
+                        </View>
+                        <TouchableOpacity onPress={() => removeCrop(item.name, item.variety)}>
+                          <IconSymbol name="trash" size={18} color="#EF4444" />
+                        </TouchableOpacity>
+                      </View>
+                    ))}
+                  </View>
+                )}
+
+                <TouchableOpacity 
+                  style={[styles.loginButton, { backgroundColor: Colors[colorScheme ?? 'light'].tint, marginTop: 20 }]} 
+                  onPress={handleRegistration}
+                  disabled={loading}
+                >
+                  {loading ? <ActivityIndicator color="#fff" /> : <ThemedText style={styles.loginButtonText}>{t('createMyAccount')}</ThemedText>}
+                </TouchableOpacity>
+              </>
+            ) : (
+              <>
+                <ThemedText style={styles.label}>{t('phone')}</ThemedText>
+                <TextInput
+                  style={[styles.input, { color: Colors[colorScheme ?? 'light'].text, borderColor: Colors[colorScheme ?? 'light'].border }]}
+                  placeholder="e.g. 9876543210"
+                  placeholderTextColor="#94A3B8"
+                  keyboardType="phone-pad"
+                  value={phone}
+                  onChangeText={setPhone}
+                />
+                <TouchableOpacity 
+                  style={[styles.loginButton, { backgroundColor: Colors[colorScheme ?? 'light'].tint }]} 
+                  onPress={handleLogin}
+                  disabled={loading}
+                >
+                  {loading ? <ActivityIndicator color="#fff" /> : <ThemedText style={styles.loginButtonText}>{t('accessMyFarm')}</ThemedText>}
+                </TouchableOpacity>
+              </>
+            )}
+
+            <TouchableOpacity 
+              onPress={() => setIsRegistering(!isRegistering)} 
+              style={{ marginTop: 20, alignItems: 'center' }}
+            >
+              <ThemedText style={{ color: Colors[colorScheme ?? 'light'].tint, fontWeight: '700' }}>
+                {isRegistering ? t('alreadyHaveAccount') : t('newFarmerCreate')}
+              </ThemedText>
+            </TouchableOpacity>
+          </View>
+          
+          <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
+            <ThemedText style={{ color: '#94A3B8' }}>{t('returnToShop')}</ThemedText>
+          </TouchableOpacity>
+        </ScrollView>
       </ThemedView>
     );
   }
@@ -280,9 +531,9 @@ export default function FarmerPortalScreen() {
 
       {/* Modern Compact Header with Logout */}
       <View style={styles.premiumHeader}>
-        <View>
+        <View style={{ flex: 1, paddingRight: 10 }}>
           <ThemedText style={styles.welcomeText}>{t('goodDay')},</ThemedText>
-          <ThemedText style={styles.farmerNameText}>{farmer?.name?.split(' ')[0] || 'User'}</ThemedText>
+          <ThemedText style={styles.farmerNameText} numberOfLines={1} adjustsFontSizeToFit>{farmer?.name?.split(' ')[0] || 'User'}</ThemedText>
         </View>
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
           <TouchableOpacity 
@@ -367,19 +618,65 @@ export default function FarmerPortalScreen() {
               </ThemedView>
             )}
 
+            {/* Quick Actions (Visits) */}
+            <View style={{ paddingHorizontal: 20, marginBottom: 20 }}>
+              <TouchableOpacity 
+                style={styles.requestVisitCard}
+                onPress={() => setIsVisitModalVisible(true)}
+              >
+                <View style={styles.requestVisitIcon}>
+                  <IconSymbol name="person.badge.plus" size={24} color="#fff" />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <ThemedText style={styles.requestVisitTitle}>{t('needExpertHelp')}</ThemedText>
+                  <ThemedText style={styles.requestVisitSub}>{t('requestVisitSub')}</ThemedText>
+                </View>
+                <IconSymbol name="chevron.right" size={20} color="#6366F1" />
+              </TouchableOpacity>
+            </View>
+
             <View style={{ paddingHorizontal: 20, marginBottom: 16 }}>
               <TouchableOpacity 
                 style={[styles.financeButton, { backgroundColor: '#FEF2F2', borderColor: '#EF4444' }]}
                 onPress={() => setIsFinanceModalVisible(true)}
               >
                 <IconSymbol name="indianrupeesign.circle.fill" size={24} color="#EF4444" />
-                <View style={{ flex: 1 }}>
-                  <ThemedText style={[styles.financeButtonText, { color: '#EF4444' }]}>Farm Finances (ROI)</ThemedText>
-                  <ThemedText style={{ fontSize: 13, color: '#DC2626', marginTop: 2 }}>Log & track your treatment expenses</ThemedText>
+                <View style={{ flex: 1, paddingHorizontal: 10 }}>
+                  <ThemedText style={[styles.financeButtonText, { color: '#EF4444' }]} numberOfLines={1}>Farm Expense Tracker</ThemedText>
+                  <ThemedText style={{ fontSize: 13, color: '#DC2626', marginTop: 2 }} numberOfLines={1}>Track your farm spending and expenses</ThemedText>
                 </View>
                 <IconSymbol name="chevron.right" size={20} color="#EF4444" />
               </TouchableOpacity>
             </View>
+
+            {updates.length > 0 && (
+              <View style={{ marginBottom: 32 }}>
+                <View style={[styles.sectionHeader, { paddingHorizontal: 20, marginBottom: 15 }]}>
+                  <ThemedText style={styles.sectionTitle}>📬 Central Notifications</ThemedText>
+                  <View style={[styles.aiBadge, { backgroundColor: '#EFF6FF', borderColor: '#BFDBFE' }]}>
+                    <ThemedText style={[styles.aiBadgeText, { color: '#2563EB' }]}>NEW</ThemedText>
+                  </View>
+                </View>
+                <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: 20, gap: 15 }}>
+                  {updates.map(update => (
+                    <ThemedView key={update.id} style={[styles.updateCard, { backgroundColor: update.category === 'Alert' ? '#FEF2F2' : Colors[colorScheme ?? 'light'].card }]}>
+                      <View style={{ flexDirection: 'row', gap: 6, marginBottom: 8, flexWrap: 'wrap' }}>
+                        <View style={[styles.categoryBadge, { backgroundColor: update.category === 'Alert' ? '#FEE2E2' : '#F0FDF4' }]}>
+                          <ThemedText style={[styles.categoryText, { color: update.category === 'Alert' ? '#DC2626' : '#15803D' }]}>{update.category}</ThemedText>
+                        </View>
+                        {update.target_crop && update.target_crop !== 'All' && (
+                          <View style={[styles.categoryBadge, { backgroundColor: '#EFF6FF' }]}>
+                            <ThemedText style={[styles.categoryText, { color: '#2563EB' }]}>🎯 {update.target_crop}</ThemedText>
+                          </View>
+                        )}
+                      </View>
+                      <ThemedText type="defaultSemiBold" style={{ fontSize: 16, marginBottom: 6, color: update.category === 'Alert' ? '#991B1B' : Colors[colorScheme ?? 'light'].text }}>{update.title}</ThemedText>
+                      <ThemedText style={{ fontSize: 13, color: update.category === 'Alert' ? '#B91C1C' : '#64748B', lineHeight: 20 }} numberOfLines={4}>{update.content}</ThemedText>
+                    </ThemedView>
+                  ))}
+                </ScrollView>
+              </View>
+            )}
 
             <View style={styles.section}>
               <View style={styles.sectionHeader}>
@@ -423,8 +720,8 @@ export default function FarmerPortalScreen() {
                         <ThemedText style={styles.freqBadge}>{schedule.frequency}</ThemedText>
                       </View>
                     </View>
-                    <ThemedText style={styles.scheduleTitle}>{schedule.title}</ThemedText>
-                    {schedule.description ? <ThemedText style={styles.scheduleDesc}>{schedule.description}</ThemedText> : null}
+                    <ThemedText style={styles.scheduleTitle} numberOfLines={1}>{schedule.title}</ThemedText>
+                    {schedule.description ? <ThemedText style={styles.scheduleDesc} numberOfLines={2}>{schedule.description}</ThemedText> : null}
                     <View style={styles.scheduleFooter}>
                     <IconSymbol name="calendar" size={12} color="#94A3B8" />
                       <ThemedText style={styles.schedulePeriod}>
@@ -457,22 +754,39 @@ export default function FarmerPortalScreen() {
                   <ThemedView key={idx} style={styles.historyCard}>
                     <View style={styles.historyHeader}>
                       <View style={styles.historyTypeContainer}>
-                        <View style={[styles.historyDot, { backgroundColor: activity.type === 'note' ? '#3B82F6' : activity.type === 'soil' ? '#10B981' : '#22C55E' }]} />
-                        <ThemedText style={styles.historyType}>
+                        <View style={[styles.historyDot, { backgroundColor: activity.type === 'note' ? '#3B82F6' : activity.type === 'soil' ? '#10B981' : activity.type === 'prescription' ? '#6366F1' : activity.type === 'visit_request' ? '#F59E0B' : '#22C55E' }]} />
+                        <ThemedText style={[styles.historyType, activity.type === 'prescription' ? { color: '#6366F1', fontWeight: '900' } : activity.type === 'visit_request' ? { color: '#F59E0B' } : {}]}>
                           {activity.type === 'note' ? t('observation') : 
                            activity.type === 'soil' ? t('soilStatus') : 
-                           activity.type === 'treatment' ? t('treatment') : t('visit')}
+                           activity.type === 'treatment' ? t('treatment') : 
+                           activity.type === 'prescription' ? t('digitalPrescription').toUpperCase() : 
+                           activity.type === 'visit_request' ? t('requestFieldVisit').toUpperCase() : t('visit')}
                         </ThemedText>
                       </View>
                       <ThemedText style={styles.historyDate}>
                         {new Date(activity.created_at || activity.visit_date || activity.application_date).toLocaleDateString()}
                       </ThemedText>
                     </View>
-                    <ThemedText style={styles.historyContent}>
+                    <ThemedText style={[styles.historyContent, activity.type === 'prescription' ? { fontSize: 18, color: '#0F172A' } : {}]}>
                       {activity.type === 'note' ? activity.note : 
                        activity.type === 'soil' ? `${t('checkedSoil')} (pH: ${activity.ph}, N: ${activity.nitrogen})` : 
-                       activity.type === 'treatment' ? `${t('applied')} ${activity.product_name} (${activity.quantity})` : activity.purpose}
+                       activity.type === 'treatment' ? `${t('applied')} ${activity.product_name} (${activity.quantity})` : 
+                       activity.type === 'visit_request' ? activity.request_text :
+                       activity.type === 'prescription' ? activity.prescription_text : activity.purpose}
                     </ThemedText>
+                    {activity.type === 'visit_request' && (
+                      <View style={{ marginTop: 10, flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                        <IconSymbol name="clock.fill" size={14} color="#F59E0B" />
+                        <ThemedText style={{ fontSize: 12, color: '#F59E0B', fontWeight: '700' }}>{t('status')}: {activity.status === 'pending' ? t('pending') : activity.status === 'scheduled' ? t('scheduled') : t('completed')}</ThemedText>
+                      </View>
+                    )}
+                    {(activity.image_uri || activity.image_url) && (
+                      <Image 
+                        source={{ uri: activity.image_uri || activity.image_url }} 
+                        style={[styles.historyImage, activity.type === 'prescription' ? { height: 200, marginTop: 15 } : {}]} 
+                        resizeMode="cover"
+                      />
+                    )}
                   </ThemedView>
                 ))
               ) : (
@@ -490,9 +804,50 @@ export default function FarmerPortalScreen() {
         isVisible={isFinanceModalVisible}
         onClose={() => setIsFinanceModalVisible(false)}
         farmerId={farmer?.id || ''}
-        landArea={farmer?.land_area?.toString() || '1'}
-        cropType={farmer?.crop_type || 'General'}
       />
+
+      {/* Visit Request Modal */}
+      <Modal
+        visible={isVisitModalVisible}
+        animationType="slide"
+        transparent={true}
+        onRequestClose={() => setIsVisitModalVisible(false)}
+      >
+        <View style={styles.modalContainer}>
+          <ThemedView style={styles.modalContent}>
+            <View style={styles.modalHeader}>
+              <ThemedText style={styles.modalTitle}>{t('requestFieldVisit')}</ThemedText>
+              <TouchableOpacity onPress={() => setIsVisitModalVisible(false)}>
+                <IconSymbol name="xmark.circle.fill" size={24} color="#94A3B8" />
+              </TouchableOpacity>
+            </View>
+
+            <ThemedText style={[styles.label, { marginBottom: 12 }]}>{t('reasonForVisit')}</ThemedText>
+            <TextInput
+              style={[styles.visitInput, { color: Colors[colorScheme ?? 'light'].text }]}
+              placeholder={t('visitPlaceholder')}
+              placeholderTextColor="#94A3B8"
+              multiline
+              value={visitText}
+              onChangeText={setVisitText}
+            />
+
+            <TouchableOpacity 
+              style={[styles.submitButton, { backgroundColor: '#6366F1' }]} 
+              onPress={handleRequestVisit}
+              disabled={savingVisit}
+            >
+              {savingVisit ? (
+                <ActivityIndicator color="#fff" />
+              ) : (
+                <ThemedText style={styles.submitButtonText}>{t('submitRequest')}</ThemedText>
+              )}
+            </TouchableOpacity>
+            
+            <View style={{ height: 40 }} />
+          </ThemedView>
+        </View>
+      </Modal>
     </ThemedView>
   );
 }
@@ -550,13 +905,147 @@ const styles = StyleSheet.create({
   inputCard: {
     width: '100%',
     padding: 24,
-    borderRadius: 24,
+    borderRadius: 32,
     backgroundColor: '#fff',
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 10 },
-    shadowOpacity: 0.05,
+    shadowOpacity: 0.1,
     shadowRadius: 20,
-    elevation: 5,
+    elevation: 10,
+  },
+  divider: {
+    height: 1,
+    backgroundColor: '#E2E8F0',
+    marginVertical: 25,
+  },
+  smallLabel: {
+    fontSize: 12,
+    fontWeight: '800',
+    color: '#94A3B8',
+    textTransform: 'uppercase',
+    marginBottom: 8,
+  },
+  cropSelectorRow: {
+    marginBottom: 20,
+  },
+  pickerContainer: {
+    borderWidth: 1.5,
+    borderColor: '#E2E8F0',
+    borderRadius: 16,
+    paddingHorizontal: 5,
+  },
+  cropChip: {
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    marginHorizontal: 5,
+    backgroundColor: '#F8FAFC',
+  },
+  cropChipText: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#64748B',
+  },
+  addCropBtn: {
+    width: 50,
+    height: 50,
+    borderRadius: 15,
+    backgroundColor: '#10B981',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  selectedCropsList: {
+    marginBottom: 20,
+  },
+  selectedCropItem: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    padding: 12,
+    backgroundColor: '#F1F5F9',
+    borderRadius: 12,
+    marginBottom: 8,
+  },
+  selectedCropName: {
+    fontSize: 14,
+    fontWeight: '800',
+    color: '#1E293B',
+  },
+  selectedCropVariety: {
+    fontSize: 12,
+    color: '#64748B',
+  },
+  requestVisitCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#EEF2FF',
+    padding: 16,
+    borderRadius: 24,
+    borderWidth: 1.5,
+    borderColor: '#6366F1',
+    gap: 15,
+  },
+  requestVisitIcon: {
+    width: 48,
+    height: 48,
+    borderRadius: 16,
+    backgroundColor: '#6366F1',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  requestVisitTitle: {
+    fontSize: 16,
+    fontWeight: '900',
+    color: '#1E293B',
+  },
+  requestVisitSub: {
+    fontSize: 12,
+    color: '#64748B',
+    fontWeight: '600',
+  },
+  modalContainer: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    justifyContent: 'flex-end',
+  },
+  modalContent: {
+    backgroundColor: '#fff',
+    borderTopLeftRadius: 32,
+    borderTopRightRadius: 32,
+    padding: 24,
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 24,
+  },
+  modalTitle: {
+    fontSize: 20,
+    fontWeight: '900',
+  },
+  visitInput: {
+    borderWidth: 1.5,
+    borderColor: '#E2E8F0',
+    borderRadius: 16,
+    padding: 16,
+    fontSize: 16,
+    minHeight: 120,
+    textAlignVertical: 'top',
+    marginBottom: 24,
+  },
+  submitButton: {
+    height: 56,
+    borderRadius: 16,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  submitButtonText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: '800',
   },
   label: {
     fontSize: 14,
@@ -758,6 +1247,23 @@ const styles = StyleSheet.create({
     fontWeight: '900',
     letterSpacing: -0.5,
   },
+  updateCard: {
+    width: 280,
+    padding: 16,
+    borderRadius: 20,
+    borderWidth: 1.5,
+    borderColor: '#E2E8F0',
+  },
+  categoryBadge: {
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 6,
+  },
+  categoryText: {
+    fontSize: 10,
+    fontWeight: '800',
+    textTransform: 'uppercase',
+  },
   section: {
     paddingHorizontal: 20,
     marginBottom: 32,
@@ -852,6 +1358,12 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     lineHeight: 26,
     color: '#1E293B',
+  },
+  historyImage: {
+    width: '100%',
+    height: 120,
+    borderRadius: 16,
+    marginTop: 12,
   },
   emptyCard: {
     padding: 60,

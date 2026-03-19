@@ -26,10 +26,12 @@ export default function FarmerFormScreen() {
     name: '',
     phone_number: '',
     land_area: '',
-    crop_type: '',
-    variety: '',
     crop_duration: '',
   });
+  const [selectedCrops, setSelectedCrops] = useState<{crop: string, variety: string}[]>([]);
+  const [currentCrop, setCurrentCrop] = useState('');
+  const [currentVariety, setCurrentVariety] = useState('');
+  
   const [focusedInput, setFocusedInput] = useState<string | null>(null);
   const [isOffline, setIsOffline] = useState(false);
   const [varietyModalVisible, setVarietyModalVisible] = useState(false);
@@ -49,6 +51,17 @@ export default function FarmerFormScreen() {
 
   const [image, setImage] = useState<string | null>(null);
   const [permission, requestPermission] = ImagePicker.useCameraPermissions();
+
+  const addCrop = () => {
+    if (!currentCrop) return;
+    setSelectedCrops([...selectedCrops, { crop: currentCrop, variety: currentVariety || 'General' }]);
+    setCurrentCrop('');
+    setCurrentVariety('');
+  };
+
+  const removeCrop = (index: number) => {
+    setSelectedCrops(selectedCrops.filter((_, i) => i !== index));
+  };
 
   const pickImage = async () => {
     if (!permission) {
@@ -111,6 +124,20 @@ export default function FarmerFormScreen() {
       return;
     }
 
+    if (selectedCrops.length === 0 && !currentCrop) {
+      Alert.alert('Error', 'Please add at least one crop');
+      return;
+    }
+
+    // Prepare final crop list
+    const finalCrops = [...selectedCrops];
+    if (currentCrop) {
+      finalCrops.push({ crop: currentCrop, variety: currentVariety || 'General' });
+    }
+
+    const cropTypeJoined = finalCrops.map(c => c.crop).join(', ');
+    const varietyJoined = finalCrops.map(c => c.variety).join(', ');
+
     setLoading(true);
     try {
       const state = await NetInfo.fetch();
@@ -124,8 +151,8 @@ export default function FarmerFormScreen() {
               name: formData.name,
               phone_number: formData.phone_number,
               land_area: formData.land_area ? parseFloat(formData.land_area) : null,
-              crop_type: formData.crop_type,
-              variety: formData.variety,
+              crop_type: cropTypeJoined,
+              variety: varietyJoined,
               crop_duration: formData.crop_duration,
             },
           ])
@@ -160,6 +187,8 @@ export default function FarmerFormScreen() {
         // 3. Offline: Save to SQLite
         const localId = await saveFarmerOffline({
           ...formData,
+          crop_type: cropTypeJoined,
+          variety: varietyJoined,
           avatar_uri: image,
           created_by: user?.id
         });
@@ -231,7 +260,7 @@ export default function FarmerFormScreen() {
           </View>
           <View style={{ flex: 1 }}>
             <ThemedText style={styles.brandingLabel}>KK SATHI</ThemedText>
-            <ThemedText type="title" style={styles.pageTitleText}>{t('newRegistration')}</ThemedText>
+            <ThemedText type="title" style={styles.pageTitleText} numberOfLines={1} adjustsFontSizeToFit>{t('newRegistration')}</ThemedText>
           </View>
           <TouchableOpacity style={styles.navLogoutBtn} onPress={handleLogout}>
             <IconSymbol name="rectangle.portrait.and.arrow.right" size={20} color="#EF4444" />
@@ -291,17 +320,36 @@ export default function FarmerFormScreen() {
 
         <ThemedView style={styles.inputGroup}>
           <ThemedText style={styles.label}>{t('selectCrop')} *</ThemedText>
+          
+          {selectedCrops.length > 0 && (
+            <View style={styles.selectedCropsContainer}>
+              {selectedCrops.map((item, idx) => (
+                <View key={idx} style={[styles.selectedCropBadge, { backgroundColor: Colors[colorScheme ?? 'light'].tint + '15' }]}>
+                  <ThemedText style={[styles.selectedCropText, { color: Colors[colorScheme ?? 'light'].tint }]}>
+                    {item.crop} ({item.variety})
+                  </ThemedText>
+                  <TouchableOpacity onPress={() => removeCrop(idx)}>
+                    <IconSymbol name="xmark.circle.fill" size={16} color={Colors[colorScheme ?? 'light'].tint} />
+                  </TouchableOpacity>
+                </View>
+              ))}
+            </View>
+          )}
+
           <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chipRow}>
             {CROPS.map(crop => (
               <TouchableOpacity 
                 key={crop.id}
                 style={[
                   styles.cropChip, 
-                  formData.crop_type === crop.name && { backgroundColor: Colors[colorScheme ?? 'light'].tint, borderColor: Colors[colorScheme ?? 'light'].tint }
+                  currentCrop === crop.name && { backgroundColor: Colors[colorScheme ?? 'light'].tint, borderColor: Colors[colorScheme ?? 'light'].tint }
                 ]}
-                onPress={() => setFormData({ ...formData, crop_type: crop.name, variety: '' })}
+                onPress={() => {
+                  setCurrentCrop(crop.name);
+                  setCurrentVariety('');
+                }}
               >
-                <ThemedText style={[styles.chipText, formData.crop_type === crop.name && { color: '#fff' }]}>
+                <ThemedText style={[styles.chipText, currentCrop === crop.name && { color: '#fff' }]}>
                   {crop.name}
                 </ThemedText>
               </TouchableOpacity>
@@ -309,26 +357,29 @@ export default function FarmerFormScreen() {
             <TouchableOpacity 
               style={[
                 styles.cropChip, 
-                !CROPS.find(c => c.name === formData.crop_type) && formData.crop_type !== '' && { backgroundColor: Colors[colorScheme ?? 'light'].tint, borderColor: Colors[colorScheme ?? 'light'].tint }
+                !CROPS.find(c => c.name === currentCrop) && currentCrop !== '' && { backgroundColor: Colors[colorScheme ?? 'light'].tint, borderColor: Colors[colorScheme ?? 'light'].tint }
               ]}
-              onPress={() => Alert.prompt('Other Crop', 'Enter crop name', (text) => setFormData({ ...formData, crop_type: text, variety: '' }))}
+              onPress={() => Alert.prompt('Other Crop', 'Enter crop name', (text) => {
+                setCurrentCrop(text);
+                setCurrentVariety('General');
+              })}
             >
-              <ThemedText style={[styles.chipText, !CROPS.find(c => c.name === formData.crop_type) && formData.crop_type !== '' && { color: '#fff' }]}>
+              <ThemedText style={[styles.chipText, !CROPS.find(c => c.name === currentCrop) && currentCrop !== '' && { color: '#fff' }]}>
                 {t('otherCrop')}
               </ThemedText>
             </TouchableOpacity>
           </ScrollView>
         </ThemedView>
 
-        {formData.crop_type && CROPS.find(c => c.name === formData.crop_type)?.varieties.length! > 0 && (
+        {currentCrop && CROPS.find(c => c.name === currentCrop)?.varieties.length! > 0 && (
           <ThemedView style={styles.inputGroup}>
             <ThemedText style={styles.label}>{t('selectVariety')} *</ThemedText>
             <TouchableOpacity 
               style={styles.dropdownTrigger}
               onPress={() => setVarietyModalVisible(true)}
             >
-              <ThemedText style={[styles.dropdownValue, !formData.variety && { color: '#94A3B8' }]}>
-                {formData.variety || t('selectVariety')}
+              <ThemedText style={[styles.dropdownValue, !currentVariety && { color: '#94A3B8' }, { flex: 1 }]} numberOfLines={1}>
+                {currentVariety || t('selectVariety')}
               </ThemedText>
               <IconSymbol name="chevron.down" size={18} color="#64748B" />
             </TouchableOpacity>
@@ -353,26 +404,26 @@ export default function FarmerFormScreen() {
                   </View>
                   
                   <FlatList
-                    data={CROPS.find(c => c.name === formData.crop_type)?.varieties}
+                    data={CROPS.find(c => c.name === currentCrop)?.varieties}
                     keyExtractor={(item) => item.id}
                     renderItem={({ item }) => (
                       <TouchableOpacity 
                         style={[
                           styles.varietyOption,
-                          formData.variety === item.name && styles.varietyOptionSelected
+                          currentVariety === item.name && styles.varietyOptionSelected
                         ]}
                         onPress={() => {
-                          setFormData({ ...formData, variety: item.name });
+                          setCurrentVariety(item.name);
                           setVarietyModalVisible(false);
                         }}
                       >
                         <ThemedText style={[
                           styles.optionText,
-                          formData.variety === item.name && { color: Colors[colorScheme ?? 'light'].tint, fontWeight: '800' }
+                          currentVariety === item.name && { color: Colors[colorScheme ?? 'light'].tint, fontWeight: '800' }
                         ]}>
                           {item.name}
                         </ThemedText>
-                        {formData.variety === item.name && (
+                        {currentVariety === item.name && (
                           <IconSymbol name="checkmark" size={18} color={Colors[colorScheme ?? 'light'].tint} />
                         )}
                       </TouchableOpacity>
@@ -383,6 +434,18 @@ export default function FarmerFormScreen() {
               </TouchableOpacity>
             </Modal>
           </ThemedView>
+        )}
+
+        {currentCrop && (
+          <TouchableOpacity 
+            style={[styles.addCropBtn, { borderColor: Colors[colorScheme ?? 'light'].tint }]}
+            onPress={addCrop}
+          >
+            <IconSymbol name="plus.circle.fill" size={18} color={Colors[colorScheme ?? 'light'].tint} />
+            <ThemedText style={[styles.addCropBtnText, { color: Colors[colorScheme ?? 'light'].tint }]}>
+              Confirm & Add {currentCrop}
+            </ThemedText>
+          </TouchableOpacity>
         )}
 
         <View style={styles.row}>
@@ -699,5 +762,39 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: '900',
     letterSpacing: 0.5,
+  },
+  selectedCropsContainer: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+    marginBottom: 10,
+  },
+  selectedCropBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 12,
+    gap: 8,
+  },
+  selectedCropText: {
+    fontSize: 14,
+    fontWeight: '700',
+  },
+  addCropBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 14,
+    borderRadius: 16,
+    borderWidth: 2,
+    borderStyle: 'dashed',
+    gap: 10,
+    marginTop: -10,
+    marginBottom: 10,
+  },
+  addCropBtnText: {
+    fontSize: 15,
+    fontWeight: '800',
   },
 });

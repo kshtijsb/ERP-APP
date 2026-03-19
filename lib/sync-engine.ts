@@ -4,13 +4,22 @@ import {
     getPendingFarmersWithFarms,
     getPendingLogsToSync,
     getPendingSchedulesToSync,
-    updateSyncStatusGeneric
+    updateSyncStatusGeneric,
+    resetStuckSyncStatuses,
+    updateLocalFarmerIds
 } from './offline-db';
 import { supabase } from './supabase';
 
 export const syncOfflineData = async () => {
   const state = await NetInfo.fetch();
   if (!state.isConnected) return;
+
+  // Recovery: Reset any records stuck in 'syncing' status from a previous app session
+  try {
+    await resetStuckSyncStatuses();
+  } catch (e) {
+    console.error('Failed to reset stuck sync statuses:', e);
+  }
 
   const pendingFarmers = await getPendingFarmersWithFarms();
   
@@ -59,6 +68,9 @@ export const syncOfflineData = async () => {
 
       // CRITICAL: Immediately sync any sub-records attached to this local ID
       const localId = `local_${record.id}`;
+      // Update any other local records to use the new remote ID
+      await updateLocalFarmerIds(localId, farmer.id);
+      
       await syncSubRecordsForFarmer(localId, farmer.id);
 
       await deleteLocalRecordGeneric('pending_farmers', record.id);
@@ -95,7 +107,7 @@ async function syncSubRecordsForFarmer(localId: string, remoteId: string) {
   }
 
   // Sync Logs for this farmer
-  const { visits, treatments, notes, soil } = await getPendingLogsToSync();
+  const { visits, treatments, notes, soil, prescriptions, visitRequests } = await getPendingLogsToSync();
   for (const v of visits.filter(v => v.farmer_id === localId)) {
     const { error } = await supabase.from('visit_logs').insert([{ farmer_id: remoteId, staff_id: v.staff_id, visit_date: v.visit_date, purpose: v.purpose }]);
     if (error) {
@@ -139,6 +151,48 @@ async function syncSubRecordsForFarmer(localId: string, remoteId: string) {
     }
     if (!error) await deleteLocalRecordGeneric('soil_health', s.id);
   }
+  for (const pr of prescriptions.filter(pr => pr.farmer_id === localId)) {
+    let imgPath = pr.image_uri;
+    if (pr.image_uri && pr.image_uri.startsWith('file://')) {
+      try {
+        const response = await fetch(pr.image_uri);
+        const blob = await response.blob();
+        const arrayBuffer = await new Response(blob).arrayBuffer();
+        const fileName = `prescriptions/${Date.now()}_${pr.id}.jpg`;
+        const { error: uploadError } = await supabase.storage.from('avatars').upload(fileName, arrayBuffer, { contentType: 'image/jpeg' });
+        if (!uploadError) {
+          const { data: { publicUrl } } = supabase.storage.from('avatars').getPublicUrl(fileName);
+          imgPath = publicUrl;
+        }
+      } catch (e) { console.error('Prescription image sync fail:', e); }
+    }
+    const { error } = await supabase.from('prescriptions').insert([{ farmer_id: remoteId, prescription_text: pr.prescription_text, image_url: imgPath, created_at: pr.created_at }]);
+    if (error) {
+      if (error.message.includes('not found') || error.message.includes('schema cache')) {
+        console.warn('Prescriptions table missing in Supabase. Skipping sync for now.');
+      } else {
+        console.error('Prescription Sync Error:', error.message);
+      }
+    }
+    if (!error) await deleteLocalRecordGeneric('prescriptions', pr.id);
+  }
+
+  for (const vr of (visitRequests || []).filter(vr => vr.farmer_id === localId)) {
+    const { error } = await supabase.from('visit_requests').insert([{ 
+      farmer_id: remoteId, 
+      request_text: vr.request_text, 
+      status: vr.status,
+      created_at: vr.created_at 
+    }]);
+    if (error) {
+      if (error.message.includes('not found') || error.message.includes('schema cache')) {
+        console.warn('Visit Requests table missing in Supabase. Skipping sync for now.');
+      } else {
+        console.error('Visit Request Sync Error:', error.message);
+      }
+    }
+    if (!error) await deleteLocalRecordGeneric('visit_requests', vr.id);
+  }
 }
 
 async function markRecordError(table: string, id: number, error: any) {
@@ -170,7 +224,7 @@ async function syncAllRemainingSubRecords() {
     }
   }
   
-  const { visits, treatments, notes, soil } = await getPendingLogsToSync();
+  const { visits, treatments, notes, soil, prescriptions, visitRequests } = await getPendingLogsToSync();
   for (const v of visits) {
     if (!v.farmer_id.startsWith('local_')) {
       const { error } = await supabase.from('visit_logs').insert([{ farmer_id: v.farmer_id, staff_id: v.staff_id, visit_date: v.visit_date, purpose: v.purpose }]);
@@ -223,6 +277,54 @@ async function syncAllRemainingSubRecords() {
         await updateSyncStatusGeneric('soil_health', s.id, 'error');
       }
       if (!error) await deleteLocalRecordGeneric('soil_health', s.id);
+    }
+  }
+  for (const pr of prescriptions) {
+    if (!pr.farmer_id.startsWith('local_')) {
+      let imgPath = pr.image_uri;
+      if (pr.image_uri && pr.image_uri.startsWith('file://')) {
+        try {
+          const response = await fetch(pr.image_uri);
+          const blob = await response.blob();
+          const arrayBuffer = await new Response(blob).arrayBuffer();
+          const fileName = `prescriptions/${Date.now()}_${pr.id}.jpg`;
+          const { error: uploadError } = await supabase.storage.from('avatars').upload(fileName, arrayBuffer, { contentType: 'image/jpeg' });
+          if (!uploadError) {
+            const { data: { publicUrl } } = supabase.storage.from('avatars').getPublicUrl(fileName);
+            imgPath = publicUrl;
+          }
+        } catch (e) { console.error('Prescription image sync fail:', e); }
+      }
+      const { error } = await supabase.from('prescriptions').insert([{ farmer_id: pr.farmer_id, prescription_text: pr.prescription_text, image_url: imgPath, created_at: pr.created_at }]);
+      if (error) {
+        if (error.message.includes('not found') || error.message.includes('schema cache')) {
+           console.warn('Prescriptions table missing in Supabase. Skipping sync for now.');
+        } else {
+           console.error('Prescription Orphan Sync Error:', error.message);
+        }
+        await updateSyncStatusGeneric('prescriptions', pr.id, 'error');
+      }
+      if (!error) await deleteLocalRecordGeneric('prescriptions', pr.id);
+    }
+  }
+
+  for (const vr of (visitRequests || [])) {
+    if (!vr.farmer_id.startsWith('local_')) {
+      const { error } = await supabase.from('visit_requests').insert([{ 
+        farmer_id: vr.farmer_id, 
+        request_text: vr.request_text, 
+        status: vr.status,
+        created_at: vr.created_at 
+      }]);
+      if (error) {
+        if (error.message.includes('not found') || error.message.includes('schema cache')) {
+           console.warn('Visit Requests table missing in Supabase. Skipping sync for now.');
+        } else {
+           console.error('Visit Request Orphan Sync Error:', error.message);
+        }
+        await updateSyncStatusGeneric('visit_requests', vr.id, 'error');
+      }
+      if (!error) await deleteLocalRecordGeneric('visit_requests', vr.id);
     }
   }
 }

@@ -80,6 +80,24 @@ export interface ExpenseLog {
   sync_status: 'pending' | 'syncing' | 'error';
 }
 
+export interface Prescription {
+  id?: number;
+  farmer_id: string;
+  prescription_text: string;
+  image_uri?: string | null;
+  sync_status: 'pending' | 'syncing' | 'error';
+  created_at: string;
+}
+
+export interface VisitRequest {
+  id?: number;
+  farmer_id: string;
+  request_text?: string;
+  status: 'pending' | 'scheduled' | 'completed';
+  sync_status: 'pending' | 'syncing' | 'error';
+  created_at: string;
+}
+
 export interface PendingFarm {
   id?: number;
   farmer_local_id: number;
@@ -110,6 +128,7 @@ export const initOfflineDB = async () => {
       crop_duration TEXT,
       avatar_uri TEXT,
       created_by TEXT,
+      address TEXT,
       sync_status TEXT DEFAULT 'pending',
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP
     );
@@ -183,15 +202,30 @@ export const initOfflineDB = async () => {
       date DATETIME DEFAULT CURRENT_TIMESTAMP,
       sync_status TEXT DEFAULT 'pending'
     );
+
+    CREATE TABLE IF NOT EXISTS prescriptions (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      farmer_id TEXT NOT NULL,
+      prescription_text TEXT NOT NULL,
+      image_uri TEXT,
+      sync_status TEXT DEFAULT 'pending',
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    );
+
+    CREATE TABLE IF NOT EXISTS visit_requests (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      farmer_id TEXT NOT NULL,
+      request_text TEXT,
+      status TEXT DEFAULT 'pending',
+      sync_status TEXT DEFAULT 'pending',
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    );
   `);
 
-  try {
-    await database.execAsync(`
-      ALTER TABLE pending_farmers ADD COLUMN last_weather_fetch TEXT;
-      ALTER TABLE pending_farmers ADD COLUMN weather_data TEXT;
-      ALTER TABLE pending_farmers ADD COLUMN variety TEXT;
-    `);
-  } catch (e) {}
+  try { await database.execAsync('ALTER TABLE pending_farmers ADD COLUMN last_weather_fetch TEXT'); } catch (e) {}
+  try { await database.execAsync('ALTER TABLE pending_farmers ADD COLUMN weather_data TEXT'); } catch (e) {}
+  try { await database.execAsync('ALTER TABLE pending_farmers ADD COLUMN variety TEXT'); } catch (e) {}
+  try { await database.execAsync('ALTER TABLE pending_farmers ADD COLUMN address TEXT'); } catch (e) {}
   try { await database.execAsync('ALTER TABLE visit_logs ADD COLUMN sync_status TEXT DEFAULT "pending"'); } catch (e) {}
   try { await database.execAsync('ALTER TABLE treatment_logs ADD COLUMN sync_status TEXT DEFAULT "pending"'); } catch (e) {}
   try { await database.execAsync('ALTER TABLE schedules ADD COLUMN sync_status TEXT DEFAULT "pending"'); } catch (e) {}
@@ -217,7 +251,7 @@ export const saveFarmOffline = async (farmerLocalId: number, boundary: any[]) =>
 // Comprehensive Pending records fetchers
 export const getPendingFarmersWithFarms = async () => {
   const database = await getDB();
-  const farmers = await database.getAllAsync<PendingFarmer & { id: number }>('SELECT * FROM pending_farmers WHERE sync_status IN ("pending", "error")');
+  const farmers = await database.getAllAsync<PendingFarmer & { id: number }>('SELECT * FROM pending_farmers WHERE sync_status IN ("pending", "error", "syncing")');
   
   const records = [];
   for (const farmer of farmers) {
@@ -235,16 +269,50 @@ export const getPendingFarmersWithFarms = async () => {
 
 export const getPendingSchedulesToSync = async () => {
   const database = await getDB();
-  return database.getAllAsync<Schedule & { id: number }>('SELECT * FROM schedules WHERE sync_status IN ("pending", "error")');
+  return database.getAllAsync<Schedule & { id: number }>('SELECT * FROM schedules WHERE sync_status IN ("pending", "error", "syncing")');
 };
 
 export const getPendingLogsToSync = async () => {
   const database = await getDB();
-  const visits = await database.getAllAsync<VisitLog & { id: number }>('SELECT * FROM visit_logs WHERE sync_status IN ("pending", "error")');
-  const treatments = await database.getAllAsync<TreatmentLog & { id: number }>('SELECT * FROM treatment_logs WHERE sync_status IN ("pending", "error")');
-  const notes = await database.getAllAsync<FieldNote & { id: number }>('SELECT * FROM field_notes WHERE sync_status IN ("pending", "error")');
-  const soil = await database.getAllAsync<SoilHealth & { id: number }>('SELECT * FROM soil_health WHERE sync_status IN ("pending", "error")');
-  return { visits, treatments, notes, soil };
+  const visits = await database.getAllAsync<VisitLog & { id: number }>('SELECT * FROM visit_logs WHERE sync_status IN ("pending", "error", "syncing")');
+  const treatments = await database.getAllAsync<TreatmentLog & { id: number }>('SELECT * FROM treatment_logs WHERE sync_status IN ("pending", "error", "syncing")');
+  const notes = await database.getAllAsync<FieldNote & { id: number }>('SELECT * FROM field_notes WHERE sync_status IN ("pending", "error", "syncing")');
+  const soil = await database.getAllAsync<SoilHealth & { id: number }>('SELECT * FROM soil_health WHERE sync_status IN ("pending", "error", "syncing")');
+  const prescriptions = await database.getAllAsync<Prescription & { id: number }>('SELECT * FROM prescriptions WHERE sync_status IN ("pending", "error", "syncing")');
+  const visitRequests = await database.getAllAsync<VisitRequest & { id: number }>('SELECT * FROM visit_requests WHERE sync_status IN ("pending", "error", "syncing")');
+  return { visits, treatments, notes, soil, prescriptions, visitRequests };
+};
+
+export const updateLocalFarmerIds = async (localId: string, remoteId: string) => {
+  const database = await getDB();
+
+  // Update tables that use 'farmer_id' (string)
+  const tables = [
+    'visit_logs', 'treatment_logs', 'field_notes', 
+    'soil_health', 'prescriptions', 'visit_requests', 
+    'schedules', 'expense_logs'
+  ];
+
+  for (const table of tables) {
+    try {
+      await database.execAsync(`UPDATE ${table} SET farmer_id = '${remoteId}' WHERE farmer_id = '${localId}'`);
+    } catch (e) {
+      // Table might not exist or column name different, ignore
+    }
+  }
+};
+
+export const updateVisitRequestStatus = async (id: number, status: string) => {
+  const database = await getDB();
+  await database.runAsync('UPDATE visit_requests SET status = ? WHERE id = ?', [status, id]);
+};
+
+export const resetStuckSyncStatuses = async () => {
+  const database = await getDB();
+  const tables = ['pending_farmers', 'schedules', 'visit_logs', 'treatment_logs', 'field_notes', 'soil_health', 'expense_logs', 'prescriptions', 'visit_requests'];
+  for (const table of tables) {
+    await database.runAsync(`UPDATE ${table} SET sync_status = 'pending' WHERE sync_status = 'syncing'`);
+  }
 };
 
 export const updateSyncStatusGeneric = async (table: string, id: number, status: string) => {
@@ -435,4 +503,57 @@ export const getActiveSchedulesByFarmerId = async (farmerId: string) => {
 export const updateScheduleStatus = async (id: number, status: string) => {
   const database = await getDB();
   await database.runAsync('UPDATE schedules SET status = ? WHERE id = ?', [status, id]);
+};
+
+export const savePrescriptionOffline = async (presc: Omit<Prescription, 'sync_status' | 'created_at'>) => {
+  const database = await getDB();
+  await database.runAsync(
+    'INSERT INTO prescriptions (farmer_id, prescription_text, image_uri) VALUES (?, ?, ?)',
+    [presc.farmer_id, presc.prescription_text, presc.image_uri || null]
+  );
+  
+  // Also log it as a visit
+  await saveVisitLogOffline({
+    farmer_id: presc.farmer_id,
+    purpose: 'Issued Field Prescription'
+  });
+};
+
+export const getPrescriptionsByFarmerId = async (farmerId: string) => {
+  const database = await getDB();
+  return await database.getAllAsync<Prescription & { id: number }>(
+    'SELECT * FROM prescriptions WHERE farmer_id = ? ORDER BY created_at DESC',
+    [farmerId]
+  );
+};
+
+export const saveVisitRequestOffline = async (req: { farmer_id: string, request_text?: string }) => {
+  const database = await getDB();
+  await database.runAsync(
+    'INSERT INTO visit_requests (farmer_id, request_text, status) VALUES (?, ?, ?)',
+    [req.farmer_id, req.request_text || null, 'pending']
+  );
+};
+
+export const getVisitRequestsByFarmerId = async (farmerId: string) => {
+  const database = await getDB();
+  return await database.getAllAsync<VisitRequest & { id: number }>(
+    'SELECT * FROM visit_requests WHERE farmer_id = ? ORDER BY created_at DESC',
+    [farmerId]
+  );
+};
+
+export const saveFarmerSelfOffline = async (farmer: { 
+  name: string, 
+  phone_number: string, 
+  address?: string, 
+  crop_type: string, 
+  variety?: string 
+}) => {
+  const database = await getDB();
+  const result = await database.runAsync(
+    'INSERT INTO pending_farmers (name, phone_number, address, crop_type, variety) VALUES (?, ?, ?, ?, ?)',
+    [farmer.name, farmer.phone_number, farmer.address || null, farmer.crop_type, farmer.variety || null]
+  );
+  return result.lastInsertRowId;
 };

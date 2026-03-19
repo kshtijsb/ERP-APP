@@ -1,8 +1,8 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { StyleSheet, FlatList, RefreshControl, View, TextInput, TouchableOpacity, useColorScheme, Alert, ActivityIndicator, Image } from 'react-native';
+import { StyleSheet, FlatList, RefreshControl, View, TextInput, TouchableOpacity, useColorScheme, Alert, ActivityIndicator, Image, Modal, ScrollView } from 'react-native';
 import { useRouter, useFocusEffect } from 'expo-router';
 import { supabase } from '@/lib/supabase';
-import { getPendingFarmersWithFarms } from '@/lib/offline-db';
+import { getPendingFarmersWithFarms, getPendingLogsToSync, updateVisitRequestStatus } from '@/lib/offline-db';
 import { syncOfflineData } from '@/lib/sync-engine';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
@@ -24,6 +24,8 @@ export default function FarmerDashboard() {
   const [searchQuery, setSearchQuery] = useState('');
   const [filterCrop, setFilterCrop] = useState('');
   const [exporting, setExporting] = useState(false);
+  const [showRequests, setShowRequests] = useState(false);
+  const [pendingRequests, setPendingRequests] = useState<any[]>([]);
 
   const handleLogout = () => {
     Alert.alert('Sign Out', 'Are you sure you want to end your secure session?', [
@@ -63,11 +65,57 @@ export default function FarmerDashboard() {
         is_offline: true
       }));
 
-      const merged = [...formattedOffline, ...(onlineData || [])];
+      // 3. Fetch Visit Requests (Online + Offline)
+      const { data: onlineVReqs } = await supabase
+        .from('visit_requests')
+        .select('*, farmers(name, phone_number)')
+        .eq('status', 'pending');
+
+      const { visitRequests: offlineVReqs } = await getPendingLogsToSync();
+      
+      // Format offline requests to match online structure
+      const formattedOfflineVReqs = offlineVReqs.map(vr => {
+        const farmer = formattedOffline.find(f => f.id === vr.farmer_id) || 
+                      onlineData?.find(f => f.id === vr.farmer_id);
+        return {
+          ...vr,
+          farmers: farmer ? { name: farmer.name, phone_number: farmer.phone_number } : null,
+          is_offline: true
+        };
+      });
+
+      const allVReqs = [...(onlineVReqs || []), ...formattedOfflineVReqs];
+      setPendingRequests(allVReqs);
+      
+      const merged = [...formattedOffline, ...(onlineData || [])].map(f => ({
+        ...f,
+        has_pending_visit: allVReqs.some(vr => vr.farmer_id === f.id) || false
+      }));
       setFarmers(merged);
       applyFilters(merged, searchQuery, filterCrop);
     } catch (error: any) {
       console.error('Error fetching farmers:', error.message);
+    }
+  };
+
+  const markRequestComplete = async (requestId: string | number, isOffline?: boolean) => {
+    try {
+      if (isOffline) {
+        await updateVisitRequestStatus(requestId as number, 'completed');
+      } else {
+        const { error } = await supabase
+          .from('visit_requests')
+          .update({ status: 'completed' })
+          .eq('id', requestId);
+
+        if (error) throw error;
+      }
+      
+      // Update local state
+      setPendingRequests(prev => prev.filter(r => r.id !== requestId));
+      fetchFarmers(); // Refresh stats
+    } catch (error: any) {
+      Alert.alert('Error', 'Failed to update request status');
     }
   };
 
@@ -142,6 +190,8 @@ export default function FarmerDashboard() {
   const renderItem = ({ item }: { item: any }) => {
     const isMapped = Array.isArray(item.farms) ? item.farms.length > 0 : !!item.farms;
     const isOffline = !!item.is_offline;
+    const isSyncing = item.sync_status === 'syncing';
+    const isError = item.sync_status === 'error';
     
     return (
       <TouchableOpacity 
@@ -175,23 +225,28 @@ export default function FarmerDashboard() {
               <ThemedText style={styles.phoneText}>{item.phone_number || 'No contact'}</ThemedText>
             </View>
           </View>
-
           <View style={styles.statusBadgeContainer}>
             <View style={[
               styles.glassBadge, 
-              isOffline ? styles.badgeOffline : (isMapped ? styles.badgeSuccess : styles.badgeWarning)
+              isSyncing ? styles.badgeOffline : (isError ? styles.badgeError : (isOffline ? styles.badgeWarning : (isMapped ? styles.badgeSuccess : styles.badgeWarning)))
             ]}>
               <View style={[
                 styles.statusDot, 
-                { backgroundColor: isOffline ? '#6366F1' : (isMapped ? '#22C55E' : '#F59E0B') }
+                { backgroundColor: isSyncing ? '#6366F1' : (isError ? '#EF4444' : (isOffline ? '#F59E0B' : (isMapped ? '#22C55E' : '#F59E0B'))) }
               ]} />
               <ThemedText style={[
                 styles.badgeLabel, 
-                { color: isOffline ? '#6366F1' : (isMapped ? '#166534' : '#92400E') }
+                { color: isSyncing ? '#6366F1' : (isError ? '#B91C1C' : (isOffline ? '#92400E' : (isMapped ? '#166534' : '#92400E'))) }
               ]}>
-                {isOffline ? 'Syncing' : (isMapped ? 'Mapped' : 'Pending')}
+                {isSyncing ? 'Syncing' : (isError ? 'Error' : (isOffline ? 'Pending' : (isMapped ? 'Mapped' : 'Unmapped')))}
               </ThemedText>
             </View>
+            {item.has_pending_visit && (
+              <View style={[styles.glassBadge, { backgroundColor: '#FEE2E2', marginLeft: 6 }]}>
+                <View style={[styles.statusDot, { backgroundColor: '#EF4444' }]} />
+                <ThemedText style={[styles.badgeLabel, { color: '#B91C1C', fontSize: 10 }]}>VISIT REQ</ThemedText>
+              </View>
+            )}
           </View>
         </View>
         
@@ -229,11 +284,74 @@ export default function FarmerDashboard() {
     );
   };
 
+  const renderVisitRequestsModal = () => (
+    <Modal
+      visible={showRequests}
+      animationType="slide"
+      transparent={true}
+      onRequestClose={() => setShowRequests(false)}
+    >
+      <View style={styles.modalOverlay}>
+        <View style={styles.modalContent}>
+          <View style={styles.modalHeader}>
+            <ThemedText style={styles.modalTitle}>{t('visitRequests')}</ThemedText>
+            <TouchableOpacity 
+              onPress={() => setShowRequests(false)} 
+              style={styles.closeButton}
+            >
+              <IconSymbol name="xmark.circle.fill" size={28} color="#94A3B8" />
+            </TouchableOpacity>
+          </View>
+          
+          <ScrollView style={styles.requestList} showsVerticalScrollIndicator={false}>
+            {pendingRequests.length === 0 ? (
+              <View style={styles.emptyContainer}>
+                <IconSymbol name="bell.slash.fill" size={48} color="#E2E8F0" />
+                <ThemedText style={styles.emptyText}>No pending requests</ThemedText>
+              </View>
+            ) : (
+              pendingRequests.map(item => (
+                <View key={item.id} style={styles.requestItem}>
+                  <View style={styles.requestItemHeader}>
+                    <ThemedText style={styles.requestFarmerName}>
+                      {item.farmers?.name || 'Unknown Farmer'}
+                    </ThemedText>
+                    <ThemedText style={styles.requestDate}>
+                      {new Date(item.created_at).toLocaleDateString()}
+                    </ThemedText>
+                  </View>
+                  <ThemedText style={styles.requestText}>
+                    {item.request_text || 'No reason provided'}
+                  </ThemedText>
+                  <View style={styles.requestFooter}>
+                    <View style={styles.requestPhoneRow}>
+                      <IconSymbol name="phone.fill" size={14} color="#64748B" />
+                      <ThemedText style={styles.requestPhone}>
+                        {item.farmers?.phone_number || 'No phone'}
+                      </ThemedText>
+                    </View>
+                    <TouchableOpacity 
+                      style={styles.completeActionBtn}
+                      onPress={() => markRequestComplete(item.id, item.is_offline)}
+                    >
+                      <ThemedText style={styles.completeActionText}>Done</ThemedText>
+                    </TouchableOpacity>
+                  </View>
+                </View>
+              ))
+            )}
+          </ScrollView>
+        </View>
+      </View>
+    </Modal>
+  );
+
   const getStatsOverview = () => {
     const total = farmers.length;
     const mapped = farmers.filter(f => Array.isArray(f.farms) ? f.farms.length > 0 : !!f.farms).length;
     const offline = farmers.filter(f => f.is_offline).length;
-    return { total, mapped, offline };
+    const visitRequests = farmers.filter(f => f.has_pending_visit).length;
+    return { total, mapped, offline, visitRequests };
   };
 
   const stats = getStatsOverview();
@@ -255,9 +373,24 @@ export default function FarmerDashboard() {
             <ThemedText style={styles.welcomeLabel}>{t('appName')} {t('ecosystem')}</ThemedText>
             <ThemedText type="title" style={styles.pageTitle}>{t('databaseHub')}</ThemedText>
           </View>
-          <TouchableOpacity style={styles.profileCircle} onPress={handleLogout}>
-             <IconSymbol name="rectangle.portrait.and.arrow.right" size={20} color="#EF4444" />
-          </TouchableOpacity>
+
+          <View style={styles.headerRightActions}>
+            <TouchableOpacity 
+              style={styles.notificationBell} 
+              onPress={() => setShowRequests(true)}
+            >
+              <IconSymbol name="bell.fill" size={22} color={stats.visitRequests > 0 ? '#F59E0B' : '#94A3B8'} />
+              {stats.visitRequests > 0 && (
+                <View style={styles.bellBadge}>
+                  <ThemedText style={styles.bellBadgeText}>{stats.visitRequests}</ThemedText>
+                </View>
+              )}
+            </TouchableOpacity>
+            
+            <TouchableOpacity style={styles.profileCircle} onPress={handleLogout}>
+              <IconSymbol name="rectangle.portrait.and.arrow.right" size={20} color="#EF4444" />
+            </TouchableOpacity>
+          </View>
         </View>
 
         <View style={styles.quickStatsRow}>
@@ -338,6 +471,7 @@ export default function FarmerDashboard() {
           </View>
         }
       />
+      {renderVisitRequestsModal()}
     </ThemedView>
   );
 }
@@ -584,6 +718,9 @@ const styles = StyleSheet.create({
   badgeOffline: {
     backgroundColor: '#EEF2FF',
   },
+  badgeError: {
+    backgroundColor: '#FEF2F2',
+  },
   cardSeparator: {
     height: 1,
     backgroundColor: '#F1F5F9',
@@ -640,5 +777,130 @@ const styles = StyleSheet.create({
     marginTop: 15,
     fontSize: 16,
     fontWeight: '700',
+  },
+  headerRightActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  notificationBell: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: '#fff',
+    justifyContent: 'center',
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 5,
+    elevation: 2,
+    position: 'relative',
+  },
+  bellBadge: {
+    position: 'absolute',
+    top: 8,
+    right: 8,
+    backgroundColor: '#EF4444',
+    minWidth: 16,
+    height: 16,
+    borderRadius: 8,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 4,
+    borderWidth: 1.5,
+    borderColor: '#fff',
+  },
+  bellBadgeText: {
+    color: '#fff',
+    fontSize: 8,
+    fontWeight: '900',
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(15, 23, 42, 0.6)',
+    justifyContent: 'flex-end',
+  },
+  modalContent: {
+    backgroundColor: '#fff',
+    borderTopLeftRadius: 32,
+    borderTopRightRadius: 32,
+    maxHeight: '80%',
+    paddingBottom: 40,
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    padding: 24,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F1F5F9',
+  },
+  modalTitle: {
+    fontSize: 20,
+    fontWeight: '800',
+    color: '#0F172A',
+  },
+  closeButton: {
+    padding: 4,
+  },
+  requestList: {
+    padding: 16,
+  },
+  requestItem: {
+    backgroundColor: '#F8FAFC',
+    borderRadius: 20,
+    padding: 16,
+    marginBottom: 12,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+  },
+  requestItemHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    marginBottom: 8,
+  },
+  requestFarmerName: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#0F172A',
+  },
+  requestDate: {
+    fontSize: 12,
+    color: '#94A3B8',
+    fontWeight: '600',
+  },
+  requestText: {
+    fontSize: 14,
+    color: '#475569',
+    lineHeight: 20,
+    marginBottom: 12,
+  },
+  requestFooter: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  requestPhoneRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  requestPhone: {
+    fontSize: 13,
+    color: '#64748B',
+    fontWeight: '600',
+  },
+  completeActionBtn: {
+    backgroundColor: '#10B981',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 10,
+  },
+  completeActionText: {
+    color: '#fff',
+    fontSize: 11,
+    fontWeight: '800',
   },
 });
