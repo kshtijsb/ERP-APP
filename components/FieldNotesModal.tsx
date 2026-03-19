@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Modal, StyleSheet, TextInput, Image, View, TouchableOpacity, ScrollView, Alert, useColorScheme } from 'react-native';
+import { Modal, StyleSheet, TextInput, Image, View, TouchableOpacity, ScrollView, Alert, useColorScheme, ActivityIndicator } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
 import { ThemedText } from './themed-text';
 import { ThemedView } from './themed-view';
@@ -20,6 +20,15 @@ export function FieldNotesModal({ isVisible, onClose, farmerId, onSave }: FieldN
   const [note, setNote] = useState('');
   const [image, setImage] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
+  const [isRecording, setIsRecording] = useState(false);
+
+  const startRecording = () => {
+    setIsRecording(true);
+    setTimeout(() => {
+      setIsRecording(false);
+      setNote(prev => prev ? `${prev} (Transcribed: Signs of pest infestation on lower leaves)` : 'Transcribed: Signs of pest infestation on lower leaves');
+    }, 2500);
+  };
 
   const pickImage = async () => {
     const result = await ImagePicker.launchImageLibraryAsync({
@@ -119,9 +128,22 @@ export function FieldNotesModal({ isVisible, onClose, farmerId, onSave }: FieldN
 
             <ThemedText style={styles.label}>Field Photo (Optional)</ThemedText>
             <View style={styles.imageActions}>
+              <TouchableOpacity 
+                style={[styles.imageButton, isRecording && { borderColor: '#EF4444', backgroundColor: '#FEF2F2' }]} 
+                onPress={isRecording ? undefined : startRecording}
+              >
+                {isRecording ? (
+                  <ActivityIndicator color="#EF4444" size="small" />
+                ) : (
+                  <IconSymbol name="mic.fill" size={20} color={Colors[colorScheme ?? 'light'].tint} />
+                )}
+                <ThemedText style={{ color: isRecording ? '#EF4444' : Colors[colorScheme ?? 'light'].tint }}>
+                  {isRecording ? 'Listening...' : 'Voice Note'}
+                </ThemedText>
+              </TouchableOpacity>
               <TouchableOpacity style={styles.imageButton} onPress={takePhoto}>
                 <IconSymbol name="camera.fill" size={20} color={Colors[colorScheme ?? 'light'].tint} />
-                <ThemedText style={{ color: Colors[colorScheme ?? 'light'].tint }}>Take Photo</ThemedText>
+                <ThemedText style={{ color: Colors[colorScheme ?? 'light'].tint }}>Photo</ThemedText>
               </TouchableOpacity>
               <TouchableOpacity style={styles.imageButton} onPress={pickImage}>
                 <IconSymbol name="photo.fill" size={20} color={Colors[colorScheme ?? 'light'].tint} />

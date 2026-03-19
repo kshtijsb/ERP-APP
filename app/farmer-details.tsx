@@ -20,6 +20,7 @@ import { TreatmentModal } from '@/components/TreatmentModal';
 import { ScheduleModal } from '@/components/ScheduleModal';
 import { fetchAndCacheWeather, parseWeatherData } from '@/lib/weather-service';
 import { getVariety } from '@/constants/crops';
+import { predictiveRiskAnalysis } from '@/lib/ai-advisor-service';
 
 export default function FarmerDetailsScreen() {
   const { id } = useLocalSearchParams();
@@ -476,6 +477,34 @@ export default function FarmerDetailsScreen() {
         )}
       </ThemedView>
 
+      {weather && farmer && farmer.crop_type && (() => {
+        const riskAnalysis = predictiveRiskAnalysis(weather, farmer.crop_type);
+        if (riskAnalysis.risks.length === 0 && riskAnalysis.alerts.length === 0) return null;
+        
+        return (
+          <View style={styles.section}>
+            <ThemedText style={styles.sectionTitle}>⚠️ Smart Advisory Alerts</ThemedText>
+            {riskAnalysis.alerts.map((alert, idx) => (
+              <View key={`alert-${idx}`} style={[styles.riskCard, { backgroundColor: '#FEF2F2', borderColor: '#F87171' }]}>
+                  <IconSymbol name="exclamationmark.triangle.fill" size={20} color="#DC2626" />
+                  <ThemedText style={styles.riskText}>{alert}</ThemedText>
+              </View>
+            ))}
+            {riskAnalysis.risks.map((risk, idx) => (
+              <View key={`risk-${idx}`} style={[styles.riskCard, { backgroundColor: risk.riskLevel === 'high' ? '#FEF2F2' : '#FFFBEB', borderColor: risk.riskLevel === 'high' ? '#F87171' : '#FBBF24' }]}>
+                  <View style={{ flex: 1 }}>
+                    <ThemedText style={[styles.riskTitle, { color: risk.riskLevel === 'high' ? '#DC2626' : '#D97706' }]}>
+                      {risk.type} Risk
+                    </ThemedText>
+                    <ThemedText style={styles.riskText}>{risk.description}</ThemedText>
+                    <ThemedText style={styles.riskRec}>Idea: {risk.recommendation}</ThemedText>
+                  </View>
+              </View>
+            ))}
+          </View>
+        );
+      })()}
+
       <View style={styles.section}>
         <ThemedText style={styles.sectionTitle}>{t('farmBoundary')}</ThemedText>
         {hasMap ? (
@@ -803,6 +832,7 @@ export default function FarmerDetailsScreen() {
         onClose={() => setIsScheduleModalVisible(false)}
         farmerId={typeof id === 'string' ? id : ''}
         onSuccess={fetchActivities}
+        currentWeather={weather}
       />
     </ScrollView>
   );
@@ -1083,7 +1113,26 @@ const styles = StyleSheet.create({
   healthHeaderRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
+    gap: 12,
+  },
+  financeButton: {
+    flexDirection: 'row',
+    padding: 18,
+    borderRadius: 20,
+    borderWidth: 1.5,
+    marginBottom: 16,
+    justifyContent: 'center',
+    alignItems: 'center',
+    gap: 12,
+  },
+  financeButtonText: {
+    fontSize: 16,
+    fontWeight: '800',
+  },
+  aiIconBadge: {
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 6,
   },
   liveBadge: {
     paddingHorizontal: 6,
@@ -1301,11 +1350,6 @@ const styles = StyleSheet.create({
     gap: 10,
     marginTop: 12,
   },
-  aiIconBadge: {
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-    borderRadius: 6,
-  },
   aiIconText: {
     color: '#fff',
     fontSize: 10,
@@ -1419,6 +1463,31 @@ const styles = StyleSheet.create({
     borderWidth: 1.5,
     borderColor: '#FEE2E2',
     gap: 10,
+  },
+  riskCard: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    padding: 16,
+    borderRadius: 16,
+    borderWidth: 1,
+    marginBottom: 12,
+    gap: 12,
+  },
+  riskTitle: {
+    fontSize: 16,
+    fontWeight: '800',
+    marginBottom: 4,
+  },
+  riskText: {
+    fontSize: 14,
+    color: '#334155',
+    lineHeight: 20,
+    marginBottom: 4,
+  },
+  riskRec: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#475569',
   },
   deleteButtonText: {
     color: '#EF4444',

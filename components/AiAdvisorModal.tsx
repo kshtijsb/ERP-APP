@@ -1,5 +1,6 @@
-import React, { useMemo } from 'react';
-import { Modal, StyleSheet, View, TouchableOpacity, ScrollView, useColorScheme } from 'react-native';
+import React, { useMemo, useState } from 'react';
+import { Modal, StyleSheet, View, TouchableOpacity, ScrollView, useColorScheme, Image, Alert } from 'react-native';
+import * as ImagePicker from 'expo-image-picker';
 let BlurView: any;
 try {
   BlurView = require('expo-blur').BlurView;
@@ -23,9 +24,33 @@ interface AiAdvisorModalProps {
 export function AiAdvisorModal({ isVisible, onClose, soilData, notes, cropType }: AiAdvisorModalProps) {
   const colorScheme = useColorScheme();
   
+  const [scannedImage, setScannedImage] = useState<string | null>(null);
+
+  const pickImage = async () => {
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      allowsEditing: true,
+      quality: 0.8,
+    });
+    if (!result.canceled) setScannedImage(result.assets[0].uri);
+  };
+
+  const takePhoto = async () => {
+    const { status } = await ImagePicker.requestCameraPermissionsAsync();
+    if (status !== 'granted') {
+      Alert.alert('Permission Denied', 'Camera access is required to scan crops.');
+      return;
+    }
+    const result = await ImagePicker.launchCameraAsync({
+      allowsEditing: true,
+      quality: 0.8,
+    });
+    if (!result.canceled) setScannedImage(result.assets[0].uri);
+  };
+
   const analysis: AiAnalysisResult = useMemo(() => {
-    return analyzeFarmData(soilData, notes, cropType);
-  }, [soilData, notes, cropType]);
+    return analyzeFarmData(soilData, notes, cropType, scannedImage);
+  }, [soilData, notes, cropType, scannedImage]);
 
   const getPriorityColor = (priority: string) => {
     switch (priority) {
@@ -74,6 +99,29 @@ export function AiAdvisorModal({ isVisible, onClose, soilData, notes, cropType }
               <View style={styles.summaryBox}>
                 <ThemedText style={styles.summaryText}>{analysis.summary}</ThemedText>
               </View>
+            </View>
+
+            <View style={styles.visualScanSection}>
+              <ThemedText style={styles.sectionTitle}>Visual Diagnostics</ThemedText>
+              {scannedImage ? (
+                <View style={styles.scannedImageContainer}>
+                   <Image source={{ uri: scannedImage }} style={styles.scannedImage} />
+                   <TouchableOpacity style={styles.removeImageBtn} onPress={() => setScannedImage(null)}>
+                      <IconSymbol name="xmark.circle.fill" size={24} color="#FF3B30" />
+                   </TouchableOpacity>
+                </View>
+              ) : (
+                <View style={styles.visualScanRow}>
+                  <TouchableOpacity style={styles.scanBtn} onPress={takePhoto}>
+                     <IconSymbol name="camera.viewfinder" size={20} color={Colors[colorScheme ?? 'light'].tint} />
+                     <ThemedText style={{ color: Colors[colorScheme ?? 'light'].tint, fontWeight: '700' }}>Scan Crop</ThemedText>
+                  </TouchableOpacity>
+                  <TouchableOpacity style={styles.scanBtn} onPress={pickImage}>
+                     <IconSymbol name="photo.fill" size={20} color={Colors[colorScheme ?? 'light'].tint} />
+                     <ThemedText style={{ color: Colors[colorScheme ?? 'light'].tint, fontWeight: '700' }}>Gallery</ThemedText>
+                  </TouchableOpacity>
+                </View>
+              )}
             </View>
 
             <ThemedText style={styles.sectionTitle}>Recommendations</ThemedText>
@@ -269,5 +317,46 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontSize: 16,
     fontWeight: '800',
+  },
+  visualScanSection: {
+    marginBottom: 24,
+  },
+  visualScanRow: {
+    flexDirection: 'row',
+    gap: 12,
+  },
+  scanBtn: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    padding: 14,
+    borderRadius: 16,
+    borderWidth: 1.5,
+    borderColor: '#E2E8F0',
+    backgroundColor: 'rgba(255,255,255,0.6)',
+    borderStyle: 'dashed',
+  },
+  scannedImageContainer: {
+    position: 'relative',
+    width: '100%',
+    height: 180,
+    borderRadius: 16,
+    overflow: 'hidden',
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+  },
+  scannedImage: {
+    width: '100%',
+    height: '100%',
+  },
+  removeImageBtn: {
+    position: 'absolute',
+    top: 8,
+    right: 8,
+    backgroundColor: '#fff',
+    borderRadius: 16,
+    padding: 2,
   },
 });

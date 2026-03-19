@@ -29,32 +29,61 @@ export const CROPS: CropConfig[] = [
   {
     id: 'soyabean',
     name: 'Soyabean',
-    varieties: [],
+    varieties: [
+      { id: 'js_335', name: 'JS 335' },
+      { id: 'js_93_05', name: 'JS 93-05' },
+      { id: 'macs_1188', name: 'MACS 1188' },
+      { id: 'ks_103', name: 'KS 103' },
+    ],
   },
   {
     id: 'peanut',
     name: 'Peanut',
-    varieties: [],
+    varieties: [
+      { id: 'tag_24', name: 'TAG 24' },
+      { id: 'tg_26', name: 'TG 26' },
+      { id: 'sb_11', name: 'SB 11' },
+      { id: 'phule_pragati', name: 'Phule Pragati' },
+    ],
   },
   {
     id: 'tomato',
     name: 'Tomato',
-    varieties: [],
+    varieties: [
+      { id: 'abhinav', name: 'Abhinav' },
+      { id: 'arka_rakshak', name: 'Arka Rakshak' },
+      { id: 'pusa_ruby', name: 'Pusa Ruby' },
+      { id: 'arka_saurabh', name: 'Arka Saurabh' },
+    ],
   },
   {
     id: 'ginger',
     name: 'Ginger',
-    varieties: [],
+    varieties: [
+      { id: 'mahim', name: 'Mahim' },
+      { id: 'rio_de_janeiro', name: 'Rio de Janeiro' },
+      { id: 'burdwan', name: 'Burdwan' },
+    ],
   },
   {
     id: 'turmeric',
     name: 'Turmeric',
-    varieties: [],
+    varieties: [
+      { id: 'salem', name: 'Salem' },
+      { id: 'sangli', name: 'Sangli' },
+      { id: 'krishna', name: 'Krishna' },
+      { id: 'tekurpet', name: 'Tekurpet' },
+    ],
   },
   {
     id: 'gram',
     name: 'Gram',
-    varieties: [],
+    varieties: [
+      { id: 'vijay', name: 'Vijay' },
+      { id: 'digvijay', name: 'Digvijay' },
+      { id: 'vishal', name: 'Vishal' },
+      { id: 'jaki_9218', name: 'JAKI 9218' },
+    ],
   },
   {
     id: 'cotton',

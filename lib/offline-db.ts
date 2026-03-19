@@ -71,6 +71,15 @@ export interface TreatmentLog {
   sync_status: 'pending' | 'syncing' | 'error';
 }
 
+export interface ExpenseLog {
+  id?: number;
+  farmer_id: string;
+  amount: number;
+  description: string;
+  date: string;
+  sync_status: 'pending' | 'syncing' | 'error';
+}
+
 export interface PendingFarm {
   id?: number;
   farmer_local_id: number;
@@ -165,6 +174,15 @@ export const initOfflineDB = async () => {
       sync_status TEXT DEFAULT 'pending',
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP
     );
+
+    CREATE TABLE IF NOT EXISTS expense_logs (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      farmer_id TEXT NOT NULL,
+      amount REAL NOT NULL,
+      description TEXT NOT NULL,
+      date DATETIME DEFAULT CURRENT_TIMESTAMP,
+      sync_status TEXT DEFAULT 'pending'
+    );
   `);
 
   try {
@@ -199,7 +217,7 @@ export const saveFarmOffline = async (farmerLocalId: number, boundary: any[]) =>
 // Comprehensive Pending records fetchers
 export const getPendingFarmersWithFarms = async () => {
   const database = await getDB();
-  const farmers = await database.getAllAsync<PendingFarmer & { id: number }>('SELECT * FROM pending_farmers WHERE sync_status != "synced"');
+  const farmers = await database.getAllAsync<PendingFarmer & { id: number }>('SELECT * FROM pending_farmers WHERE sync_status IN ("pending", "error")');
   
   const records = [];
   for (const farmer of farmers) {
@@ -217,15 +235,15 @@ export const getPendingFarmersWithFarms = async () => {
 
 export const getPendingSchedulesToSync = async () => {
   const database = await getDB();
-  return database.getAllAsync<Schedule & { id: number }>('SELECT * FROM schedules WHERE sync_status = "pending"');
+  return database.getAllAsync<Schedule & { id: number }>('SELECT * FROM schedules WHERE sync_status IN ("pending", "error")');
 };
 
 export const getPendingLogsToSync = async () => {
   const database = await getDB();
-  const visits = await database.getAllAsync<VisitLog & { id: number }>('SELECT * FROM visit_logs WHERE sync_status = "pending"');
-  const treatments = await database.getAllAsync<TreatmentLog & { id: number }>('SELECT * FROM treatment_logs WHERE sync_status = "pending"');
-  const notes = await database.getAllAsync<FieldNote & { id: number }>('SELECT * FROM field_notes WHERE sync_status = "pending"');
-  const soil = await database.getAllAsync<SoilHealth & { id: number }>('SELECT * FROM soil_health WHERE sync_status = "pending"');
+  const visits = await database.getAllAsync<VisitLog & { id: number }>('SELECT * FROM visit_logs WHERE sync_status IN ("pending", "error")');
+  const treatments = await database.getAllAsync<TreatmentLog & { id: number }>('SELECT * FROM treatment_logs WHERE sync_status IN ("pending", "error")');
+  const notes = await database.getAllAsync<FieldNote & { id: number }>('SELECT * FROM field_notes WHERE sync_status IN ("pending", "error")');
+  const soil = await database.getAllAsync<SoilHealth & { id: number }>('SELECT * FROM soil_health WHERE sync_status IN ("pending", "error")');
   return { visits, treatments, notes, soil };
 };
 
@@ -361,6 +379,19 @@ export const saveTreatmentLogOffline = async (log: Omit<TreatmentLog, 'sync_stat
 export const getTreatmentLogsByFarmerId = async (farmerId: string) => {
   const database = await getDB();
   return database.getAllAsync<TreatmentLog>('SELECT * FROM treatment_logs WHERE farmer_id = ? ORDER BY application_date DESC', [farmerId]);
+};
+
+export const saveExpenseLogOffline = async (log: Omit<ExpenseLog, 'sync_status'>) => {
+  const database = await getDB();
+  await database.runAsync(
+    'INSERT INTO expense_logs (farmer_id, amount, description, date) VALUES (?, ?, ?, ?)',
+    [log.farmer_id, log.amount, log.description, log.date || new Date().toISOString()]
+  );
+};
+
+export const getExpenseLogsByFarmerId = async (farmerId: string) => {
+  const database = await getDB();
+  return database.getAllAsync<ExpenseLog>('SELECT * FROM expense_logs WHERE farmer_id = ? ORDER BY date DESC', [farmerId]);
 };
 
 export const updateFarmerWeather = async (farmerId: string, weatherData: string) => {

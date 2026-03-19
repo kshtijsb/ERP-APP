@@ -12,9 +12,10 @@ interface ScheduleModalProps {
   onClose: () => void;
   farmerId: string;
   onSuccess: () => void;
+  currentWeather?: any;
 }
 
-export function ScheduleModal({ visible, onClose, farmerId, onSuccess }: ScheduleModalProps) {
+export function ScheduleModal({ visible, onClose, farmerId, onSuccess, currentWeather }: ScheduleModalProps) {
   const colorScheme = useColorScheme();
   const [loading, setLoading] = useState(false);
   const [type, setType] = useState<'irrigation' | 'spray'>('irrigation');
@@ -29,6 +30,22 @@ export function ScheduleModal({ visible, onClose, farmerId, onSuccess }: Schedul
       return;
     }
 
+    if (type === 'spray' && currentWeather && (currentWeather.rain_chance > 40 || (currentWeather.condition && currentWeather.condition.toLowerCase().includes('rain')))) {
+      Alert.alert(
+        'Weather Warning',
+        `High chance of rain detected. Spraying treatments might be washed away. Are you sure you want to schedule this?`,
+        [
+          { text: 'Cancel', style: 'cancel' },
+          { text: 'Schedule Anyway', style: 'destructive', onPress: performSave }
+        ]
+      );
+      return;
+    }
+
+    performSave();
+  };
+
+  const performSave = async () => {
     setLoading(true);
     try {
       const startDate = new Date().toISOString();

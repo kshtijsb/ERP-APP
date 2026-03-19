@@ -23,6 +23,7 @@ import { supabase } from '@/lib/supabase';
 import { fetchAndCacheWeather } from '@/lib/weather-service';
 import { predictiveRiskAnalysis, PredictiveRisk } from '@/lib/ai-advisor-service';
 import { RiskCard } from '@/components/RiskCard';
+import { FinanceModal } from '@/components/FinanceModal';
 import { useTranslation } from '@/context/language-context';
 
 export default function FarmerPortalScreen() {
@@ -40,6 +41,7 @@ export default function FarmerPortalScreen() {
   const [weather, setWeather] = useState<any>(null);
   const [activeTab, setActiveTab] = useState<'insights' | 'plan' | 'history'>('insights');
   const [refreshing, setRefreshing] = useState(false);
+  const [isFinanceModalVisible, setIsFinanceModalVisible] = useState(false);
 
   const handleLogin = async () => {
     const cleanPhone = phone.replace(/\D/g, '');
@@ -365,6 +367,20 @@ export default function FarmerPortalScreen() {
               </ThemedView>
             )}
 
+            <View style={{ paddingHorizontal: 20, marginBottom: 16 }}>
+              <TouchableOpacity 
+                style={[styles.financeButton, { backgroundColor: '#FEF2F2', borderColor: '#EF4444' }]}
+                onPress={() => setIsFinanceModalVisible(true)}
+              >
+                <IconSymbol name="indianrupeesign.circle.fill" size={24} color="#EF4444" />
+                <View style={{ flex: 1 }}>
+                  <ThemedText style={[styles.financeButtonText, { color: '#EF4444' }]}>Farm Finances (ROI)</ThemedText>
+                  <ThemedText style={{ fontSize: 13, color: '#DC2626', marginTop: 2 }}>Log & track your treatment expenses</ThemedText>
+                </View>
+                <IconSymbol name="chevron.right" size={20} color="#EF4444" />
+              </TouchableOpacity>
+            </View>
+
             <View style={styles.section}>
               <View style={styles.sectionHeader}>
                 <ThemedText style={styles.sectionTitle}>{t('aiRiskAnalysis')}</ThemedText>
@@ -469,6 +485,14 @@ export default function FarmerPortalScreen() {
           </View>
         )}
       </ScrollView>
+
+      <FinanceModal
+        isVisible={isFinanceModalVisible}
+        onClose={() => setIsFinanceModalVisible(false)}
+        farmerId={farmer?.id || ''}
+        landArea={farmer?.land_area?.toString() || '1'}
+        cropType={farmer?.crop_type || 'General'}
+      />
     </ThemedView>
   );
 }
@@ -720,6 +744,19 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '600',
     flex: 1,
+  },
+  financeButton: {
+    flexDirection: 'row',
+    padding: 20,
+    borderRadius: 24,
+    borderWidth: 1.5,
+    alignItems: 'center',
+    gap: 16,
+  },
+  financeButtonText: {
+    fontSize: 18,
+    fontWeight: '900',
+    letterSpacing: -0.5,
   },
   section: {
     paddingHorizontal: 20,

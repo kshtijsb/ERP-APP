@@ -18,11 +18,19 @@ export default function LoginScreen() {
   const [loading, setLoading] = useState(false);
   const [mode, setMode] = useState<'login' | 'signup'>('login');
   const [fullName, setFullName] = useState('');
+  const [companyCode, setCompanyCode] = useState('');
 
   const handleAuth = async () => {
-    if (!email || !password || (mode === 'signup' && !fullName)) {
+    if (!email || !password || (mode === 'signup' && (!fullName || !companyCode))) {
       Alert.alert('Details Missing', 'Please fill in all required fields.');
       return;
+    }
+
+    if (mode === 'signup') {
+      if (companyCode.toUpperCase() !== 'KKSATHI-STAFF') {
+        Alert.alert('Access Denied', 'Invalid Company Invitation Code. Contact your administrator.');
+        return;
+      }
     }
 
     setLoading(true);
@@ -83,19 +91,36 @@ export default function LoginScreen() {
 
         <View style={styles.form}>
           {mode === 'signup' && (
-            <View style={styles.inputGroup}>
-              <ThemedText style={styles.label}>{t('fullName')}</ThemedText>
-              <View style={[styles.inputWrapper, { borderColor: Colors[colorScheme ?? 'light'].border }]}>
-                <IconSymbol name="person.fill" size={18} color="#94A3B8" />
-                <TextInput
-                  style={[styles.input, { color: Colors[colorScheme ?? 'light'].text }]}
-                  placeholder="Employee Full Name"
-                  placeholderTextColor="#94A3B8"
-                  value={fullName}
-                  onChangeText={setFullName}
-                />
+            <>
+              <View style={styles.inputGroup}>
+                <ThemedText style={styles.label}>{t('fullName')}</ThemedText>
+                <View style={[styles.inputWrapper, { borderColor: Colors[colorScheme ?? 'light'].border }]}>
+                  <IconSymbol name="person.fill" size={18} color="#94A3B8" />
+                  <TextInput
+                    style={[styles.input, { color: Colors[colorScheme ?? 'light'].text }]}
+                    placeholder="Employee Full Name"
+                    placeholderTextColor="#94A3B8"
+                    value={fullName}
+                    onChangeText={setFullName}
+                  />
+                </View>
               </View>
-            </View>
+
+              <View style={styles.inputGroup}>
+                <ThemedText style={styles.label}>Company Code</ThemedText>
+                <View style={[styles.inputWrapper, { borderColor: Colors[colorScheme ?? 'light'].border }]}>
+                  <IconSymbol name="key.fill" size={18} color="#94A3B8" />
+                  <TextInput
+                    style={[styles.input, { color: Colors[colorScheme ?? 'light'].text }]}
+                    placeholder="Invitation Code"
+                    placeholderTextColor="#94A3B8"
+                    autoCapitalize="characters"
+                    value={companyCode}
+                    onChangeText={setCompanyCode}
+                  />
+                </View>
+              </View>
+            </>
           )}
 
           <View style={styles.inputGroup}>

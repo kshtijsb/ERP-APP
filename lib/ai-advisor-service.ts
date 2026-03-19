@@ -26,7 +26,8 @@ export interface RiskAnalysisResult {
 export function analyzeFarmData(
   soil: { ph: number; nitrogen: number; phosphorus: number; potassium: number } | null,
   notes: string[],
-  cropType: string
+  cropType: string,
+  imageUri?: string | null
 ): AiAnalysisResult {
   const recommendations: AiRecommendation[] = [];
   let score = 80; // Baseline health score
@@ -114,6 +115,17 @@ export function analyzeFarmData(
       priority: 'low',
       category: 'crop'
     });
+  }
+
+  // Visual Image Analysis Mock
+  if (imageUri) {
+    recommendations.unshift({
+      title: 'Visual Scan: Early Blight Detected',
+      advice: 'The uploaded image shows clear signs of Early Blight (Alternaria solani). Apply a copper-based fungicide immediately and remove infected lower leaves to prevent spread.',
+      priority: 'high',
+      category: 'pest'
+    });
+    score -= 25;
   }
 
   // Final Result

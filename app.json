@@ -7,7 +7,6 @@
     "icon": "./assets/images/icon.png",
     "scheme": "farmergis",
     "userInterfaceStyle": "automatic",
-    "newArchEnabled": false,
     "ios": {
       "bundleIdentifier": "com.krushikanchan.sathi",
       "supportsTablet": true,
