@@ -93,6 +93,13 @@ export function FieldNotesModal({ isVisible, onClose, farmerId, onSave }: FieldN
 
           <ScrollView style={styles.form}>
             <ThemedText style={styles.label}>Observation Notes</ThemedText>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.chipScroll}>
+              {['Healthy Growth', 'Pest Spotted', 'Needs Water', 'Weed Growth', 'Harvest Ready'].map((chip) => (
+                <TouchableOpacity key={chip} style={[styles.chip, note.includes(chip) && { backgroundColor: Colors[colorScheme ?? 'light'].tint }]} onPress={() => setNote(prev => prev ? `${prev}, ${chip}` : chip)}>
+                  <ThemedText style={[styles.chipText, note.includes(chip) && { color: '#fff' }]}>{chip}</ThemedText>
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
             <TextInput
               style={[
                 styles.textInput,
@@ -177,6 +184,22 @@ const styles = StyleSheet.create({
     marginBottom: 8,
     marginTop: 16,
     opacity: 0.7,
+  },
+  chipScroll: {
+    flexDirection: 'row',
+    marginBottom: 12,
+  },
+  chip: {
+    backgroundColor: '#E2E8F0',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 16,
+    marginRight: 8,
+  },
+  chipText: {
+    fontSize: 12,
+    color: '#475569',
+    fontWeight: '600',
   },
   textInput: {
     borderRadius: 12,

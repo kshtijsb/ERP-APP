@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Modal, StyleSheet, TextInput, TouchableOpacity, View, Alert, useColorScheme, Platform } from 'react-native';
+import { Modal, StyleSheet, TextInput, TouchableOpacity, View, Alert, useColorScheme, Platform, ScrollView } from 'react-native';
 import { ThemedText } from './themed-text';
 import { ThemedView } from './themed-view';
 import { IconSymbol } from './ui/icon-symbol';
@@ -63,6 +63,13 @@ export function TreatmentModal({ isVisible, onClose, farmerId, onSave }: Treatme
 
           <View style={styles.field}>
             <ThemedText style={styles.label}>Product Name / Chemical</ThemedText>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.chipScroll}>
+              {['Urea', 'DAP', 'Neem Oil', '19:19:19', 'Nano Urea'].map((chip) => (
+                <TouchableOpacity key={chip} style={[styles.chip, productName === chip && { backgroundColor: Colors[colorScheme ?? 'light'].tint }]} onPress={() => setProductName(chip)}>
+                  <ThemedText style={[styles.chipText, productName === chip && { color: '#fff' }]}>{chip}</ThemedText>
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
             <TextInput
               style={[styles.input, { color: Colors[colorScheme ?? 'light'].text, borderColor: Colors[colorScheme ?? 'light'].border }]}
               placeholder="e.g. Urea, Neem Oil, Seed Variety..."
@@ -74,6 +81,13 @@ export function TreatmentModal({ isVisible, onClose, farmerId, onSave }: Treatme
 
           <View style={styles.field}>
             <ThemedText style={styles.label}>Quantity / Dosage</ThemedText>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.chipScroll}>
+              {['50kg', '1 Bag', '1 Liter', '500ml', '250ml'].map((chip) => (
+                <TouchableOpacity key={chip} style={[styles.chip, quantity === chip && { backgroundColor: Colors[colorScheme ?? 'light'].tint }]} onPress={() => setQuantity(chip)}>
+                  <ThemedText style={[styles.chipText, quantity === chip && { color: '#fff' }]}>{chip}</ThemedText>
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
             <TextInput
               style={[styles.input, { color: Colors[colorScheme ?? 'light'].text, borderColor: Colors[colorScheme ?? 'light'].border }]}
               placeholder="e.g. 50kg, 2 Liters per Acre..."
@@ -135,6 +149,22 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     fontSize: 16,
     backgroundColor: '#F8FAFC',
+  },
+  chipScroll: {
+    flexDirection: 'row',
+    marginBottom: 8,
+  },
+  chip: {
+    backgroundColor: '#E2E8F0',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 16,
+    marginRight: 8,
+  },
+  chipText: {
+    fontSize: 12,
+    color: '#475569',
+    fontWeight: '600',
   },
   saveButton: {
     height: 56,

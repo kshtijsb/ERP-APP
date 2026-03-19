@@ -10,7 +10,8 @@ import { ThemedView } from '@/components/themed-view';
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { Colors } from '@/constants/theme';
 import { fetchNDVIOverlay, getHealthColor } from '@/lib/satellite-service';
-import { getFarmerLocalById, deleteLocalRecordGeneric, getFieldNotesByFarmerId, getSoilHealthByFarmerId, getVisitLogsByFarmerId, saveVisitLogOffline, getTreatmentLogsByFarmerId, getActiveSchedulesByFarmerId } from '@/lib/offline-db';
+import { getFarmerLocalById, deleteLocalRecordGeneric, getFieldNotesByFarmerId, getSoilHealthByFarmerId, getVisitLogsByFarmerId, saveVisitLogOffline, getTreatmentLogsByFarmerId, getActiveSchedulesByFarmerId, updateScheduleStatus, saveTreatmentLogOffline } from '@/lib/offline-db';
+import { syncOfflineData } from '@/lib/sync-engine';
 import { useAuth } from '@/context/auth-context';
 import { FieldNotesModal } from '@/components/FieldNotesModal';
 import { SoilHealthModal } from '@/components/SoilHealthModal';
@@ -149,6 +150,55 @@ export default function FarmerDetailsScreen() {
   useEffect(() => {
     fetchActivities();
   }, [id]);
+
+  const activeTasks = activities.filter(a => a.type === 'schedule' && a.status === 'active');
+
+  const completeTask = async (activity: any) => {
+    Alert.alert(
+      'Mark Task Done',
+      `Did you complete "${activity.title}"?`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        { 
+          text: 'Complete', 
+          onPress: async () => {
+            try {
+              setLoading(true);
+              if (typeof activity.id === 'string' && !activity.id.startsWith('local_')) {
+                await supabase.from('schedules').update({ status: 'completed' }).eq('id', activity.id);
+              } else {
+                const localId = typeof activity.id === 'string' ? parseInt(activity.id.replace('local_', '')) : activity.id;
+                await updateScheduleStatus(localId, 'completed');
+              }
+
+              const isSpray = activity.title.toLowerCase().includes('spray') || activity.title.toLowerCase().includes('treatment');
+              if (isSpray) {
+                await saveTreatmentLogOffline({
+                  farmer_id: typeof id === 'string' ? id : '',
+                  product_name: activity.title,
+                  quantity: 'As Scheduled',
+                  application_date: new Date().toISOString()
+                });
+              } else {
+                await saveVisitLogOffline({
+                  farmer_id: typeof id === 'string' ? id : '',
+                  purpose: `Completed: ${activity.title}`
+                });
+              }
+              syncOfflineData();
+              fetchActivities();
+              Alert.alert('Success', 'Task marked as done!');
+            } catch (e) {
+              console.error(e);
+              Alert.alert('Error', 'Failed to complete task');
+            } finally {
+              setLoading(false);
+            }
+          }
+        }
+      ]
+    );
+  };
 
   useEffect(() => {
     if (farmer && farm?.boundary) {
@@ -660,6 +710,35 @@ export default function FarmerDetailsScreen() {
 
       <View style={styles.section}>
         <View style={styles.sectionHeader}>
+          <ThemedText style={styles.sectionTitle}>Today's Actionable Tasks</ThemedText>
+        </View>
+        {activeTasks.length > 0 ? (
+          activeTasks.map((task, idx) => (
+            <View key={idx} style={[styles.taskCard, { backgroundColor: Colors[colorScheme ?? 'light'].card, borderColor: Colors[colorScheme ?? 'light'].border }]}>
+              <View style={styles.taskCardLeft}>
+                <View style={[styles.taskIconBg, { backgroundColor: task.type === 'irrigation' ? '#3B82F615' : '#10B98115' }]}>
+                  <IconSymbol name={task.type === 'irrigation' ? 'drop.fill' : 'bubbles.and.sparkles.fill'} size={18} color={task.type === 'irrigation' ? '#3B82F6' : '#10B981'} />
+                </View>
+                <View>
+                  <ThemedText style={styles.taskTitle}>{task.title}</ThemedText>
+                  <ThemedText style={styles.taskSub}>{task.frequency} • {task.type}</ThemedText>
+                </View>
+              </View>
+              <TouchableOpacity style={styles.markDoneBtn} onPress={() => completeTask(task)}>
+                <IconSymbol name="checkmark.circle.fill" size={24} color="#22C55E" />
+              </TouchableOpacity>
+            </View>
+          ))
+        ) : (
+          <View style={[styles.emptyTaskCard, { backgroundColor: colorScheme === 'dark' ? '#1E293B' : '#F8FAFC' }]}>
+            <IconSymbol name="checkmark.shield.fill" size={24} color="#94A3B8" />
+            <ThemedText style={styles.emptyTaskText}>No pending tasks for today.</ThemedText>
+          </View>
+        )}
+      </View>
+
+      <View style={styles.section}>
+        <View style={styles.sectionHeader}>
           <ThemedText style={styles.sectionTitle}>Field Activity Timeline</ThemedText>
           {refreshingActivities && <ActivityIndicator size="small" color={Colors[colorScheme ?? 'light'].tint} />}
         </View>
@@ -803,6 +882,61 @@ function InfoCard({ label, value, icon, color }: { label: string; value: string;
 }
 
 const styles = StyleSheet.create({
+  taskCard: {
+    borderWidth: 1,
+    borderRadius: 16,
+    padding: 16,
+    marginBottom: 12,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 4,
+    elevation: 2,
+  },
+  taskCardLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    flex: 1,
+  },
+  taskIconBg: {
+    width: 40,
+    height: 40,
+    borderRadius: 12,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  taskTitle: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: '#334155',
+  },
+  taskSub: {
+    fontSize: 12,
+    color: '#64748B',
+    marginTop: 2,
+  },
+  markDoneBtn: {
+    padding: 8,
+  },
+  emptyTaskCard: {
+    padding: 24,
+    borderRadius: 16,
+    borderStyle: 'dashed',
+    borderWidth: 1.5,
+    borderColor: '#CBD5E1',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+  },
+  emptyTaskText: {
+    fontSize: 14,
+    color: '#64748B',
+    fontWeight: '600',
+  },
   container: {
     flex: 1,
   },

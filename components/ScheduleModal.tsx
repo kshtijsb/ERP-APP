@@ -92,6 +92,22 @@ export function ScheduleModal({ visible, onClose, farmerId, onSuccess }: Schedul
               </TouchableOpacity>
             </View>
 
+            {/* Smart Templates */}
+            <View style={styles.inputGroup}>
+              <ThemedText style={styles.label}>Quick Presets</ThemedText>
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.chipScroll}>
+                <TouchableOpacity style={styles.chip} onPress={() => { setType('irrigation'); setTitle('Routine Drip Irrigation'); setFrequency('daily'); setDays('7'); }}>
+                  <ThemedText style={styles.chipText}>💧 1-Week Drip</ThemedText>
+                </TouchableOpacity>
+                <TouchableOpacity style={styles.chip} onPress={() => { setType('spray'); setTitle('NPK 19:19:19 Spray'); setFrequency('weekly'); setDays('14'); }}>
+                  <ThemedText style={styles.chipText}>🌱 NPK Spray</ThemedText>
+                </TouchableOpacity>
+                <TouchableOpacity style={styles.chip} onPress={() => { setType('spray'); setTitle('Neem Oil Preventative'); setFrequency('bi-weekly'); setDays('28'); }}>
+                  <ThemedText style={styles.chipText}>🌿 Neem Preventative</ThemedText>
+                </TouchableOpacity>
+              </ScrollView>
+            </View>
+
             <View style={styles.inputGroup}>
               <ThemedText style={styles.label}>Schedule Title</ThemedText>
               <TextInput
@@ -215,6 +231,22 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     fontSize: 16,
     fontWeight: '600',
+  },
+  chipScroll: {
+    flexDirection: 'row',
+    marginBottom: 4,
+  },
+  chip: {
+    backgroundColor: '#E2E8F0',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 16,
+    marginRight: 8,
+  },
+  chipText: {
+    fontSize: 12,
+    color: '#475569',
+    fontWeight: '700',
   },
   textArea: {
     height: 100,
