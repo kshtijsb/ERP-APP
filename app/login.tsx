@@ -80,9 +80,11 @@ export default function LoginScreen() {
             </ThemedText>
           </TouchableOpacity>
 
-          <ThemedView style={styles.logoCircle}>
-            <IconSymbol name="leaf.fill" size={40} color={Colors[colorScheme ?? 'light'].tint} />
-          </ThemedView>
+          <Image 
+            source={require('@/assets/images/logo.png')} 
+            style={styles.logoImage} 
+            resizeMode="contain" 
+          />
           <ThemedText type="title" style={styles.title}>{t('appName')}</ThemedText>
           <ThemedText style={styles.subtitle}>
             {mode === 'login' ? t('staffPortal') + ' ' + t('login') : t('signup')}
@@ -250,17 +252,30 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '800',
     color: '#64748B',
+    lineHeight: 18,
+    paddingTop: 2,
   },
   title: {
     fontSize: 28,
     fontWeight: '900',
-    letterSpacing: -1,
+    textAlign: 'center',
+    lineHeight: 34,
+    paddingTop: 4,
+  },
+  logoImage: {
+    width: 100,
+    height: 100,
+    marginBottom: 5,
+    alignSelf: 'center',
   },
   subtitle: {
     fontSize: 16,
     color: '#64748B',
     marginTop: 4,
     fontWeight: '600',
+    lineHeight: 22,
+    paddingTop: 2,
+    textAlign: 'center',
   },
   form: {
     gap: 20,

@@ -17,6 +17,8 @@ export interface PendingFarmer {
   created_at: string;
   last_weather_fetch?: string | null;
   weather_data?: string | null;
+  village?: string | null;
+  address?: string | null;
 }
 
 export interface FieldNote {
@@ -128,6 +130,7 @@ export const initOfflineDB = async () => {
       crop_duration TEXT,
       avatar_uri TEXT,
       created_by TEXT,
+      village TEXT,
       address TEXT,
       sync_status TEXT DEFAULT 'pending',
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP
@@ -226,6 +229,7 @@ export const initOfflineDB = async () => {
   try { await database.execAsync('ALTER TABLE pending_farmers ADD COLUMN weather_data TEXT'); } catch (e) {}
   try { await database.execAsync('ALTER TABLE pending_farmers ADD COLUMN variety TEXT'); } catch (e) {}
   try { await database.execAsync('ALTER TABLE pending_farmers ADD COLUMN address TEXT'); } catch (e) {}
+  try { await database.execAsync('ALTER TABLE pending_farmers ADD COLUMN village TEXT'); } catch (e) {}
   try { await database.execAsync('ALTER TABLE visit_logs ADD COLUMN sync_status TEXT DEFAULT "pending"'); } catch (e) {}
   try { await database.execAsync('ALTER TABLE treatment_logs ADD COLUMN sync_status TEXT DEFAULT "pending"'); } catch (e) {}
   try { await database.execAsync('ALTER TABLE schedules ADD COLUMN sync_status TEXT DEFAULT "pending"'); } catch (e) {}
@@ -234,8 +238,8 @@ export const initOfflineDB = async () => {
 export const saveFarmerOffline = async (farmer: Omit<PendingFarmer, 'sync_status' | 'created_at'>) => {
   const database = await getDB();
   const result = await database.runAsync(
-    'INSERT INTO pending_farmers (name, phone_number, land_area, crop_type, variety, crop_duration, avatar_uri, created_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
-    [farmer.name, farmer.phone_number, farmer.land_area, farmer.crop_type, farmer.variety, farmer.crop_duration, farmer.avatar_uri || null, farmer.created_by || null]
+    'INSERT INTO pending_farmers (name, phone_number, land_area, crop_type, variety, crop_duration, avatar_uri, created_by, village, address) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+    [farmer.name, farmer.phone_number, farmer.land_area, farmer.crop_type, farmer.variety, farmer.crop_duration, farmer.avatar_uri || null, farmer.created_by || null, farmer.village || null, farmer.address || null]
   );
   return result.lastInsertRowId;
 };
@@ -546,14 +550,15 @@ export const getVisitRequestsByFarmerId = async (farmerId: string) => {
 export const saveFarmerSelfOffline = async (farmer: { 
   name: string, 
   phone_number: string, 
+  village?: string,
   address?: string, 
   crop_type: string, 
   variety?: string 
 }) => {
   const database = await getDB();
   const result = await database.runAsync(
-    'INSERT INTO pending_farmers (name, phone_number, address, crop_type, variety) VALUES (?, ?, ?, ?, ?)',
-    [farmer.name, farmer.phone_number, farmer.address || null, farmer.crop_type, farmer.variety || null]
+    'INSERT INTO pending_farmers (name, phone_number, village, address, crop_type, variety) VALUES (?, ?, ?, ?, ?, ?)',
+    [farmer.name, farmer.phone_number, farmer.village || null, farmer.address || null, farmer.crop_type, farmer.variety || null]
   );
   return result.lastInsertRowId;
 };

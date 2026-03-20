@@ -27,6 +27,7 @@ export default function FarmerFormScreen() {
     phone_number: '',
     land_area: '',
     crop_duration: '',
+    village: '',
   });
   const [selectedCrops, setSelectedCrops] = useState<{crop: string, variety: string}[]>([]);
   const [currentCrop, setCurrentCrop] = useState('');
@@ -154,6 +155,8 @@ export default function FarmerFormScreen() {
               crop_type: cropTypeJoined,
               variety: varietyJoined,
               crop_duration: formData.crop_duration,
+              village: formData.village,
+              created_by: user?.id,
             },
           ])
           .select('id, name')
@@ -190,7 +193,8 @@ export default function FarmerFormScreen() {
           crop_type: cropTypeJoined,
           variety: varietyJoined,
           avatar_uri: image,
-          created_by: user?.id
+          created_by: user?.id,
+          village: formData.village
         });
 
         Alert.alert(
@@ -315,6 +319,19 @@ export default function FarmerFormScreen() {
             onFocus={() => setFocusedInput('phone')}
             onBlur={() => setFocusedInput(null)}
             onChangeText={(text) => setFormData({ ...formData, phone_number: text })}
+          />
+        </ThemedView>
+
+        <ThemedView style={styles.inputGroup}>
+          <ThemedText style={styles.label}>{t('villageAddress')}</ThemedText>
+          <TextInput
+            style={getInputStyle('village')}
+            placeholder={t('enterVillage')}
+            placeholderTextColor="#94A3B8"
+            value={formData.village}
+            onFocus={() => setFocusedInput('village')}
+            onBlur={() => setFocusedInput(null)}
+            onChangeText={(text) => setFormData({ ...formData, village: text })}
           />
         </ThemedView>
 
@@ -531,6 +548,8 @@ const styles = StyleSheet.create({
     color: '#64748B',
     textTransform: 'uppercase',
     letterSpacing: 1,
+    lineHeight: 18,
+    paddingTop: 2,
   },
   langToggle: {
     position: 'absolute',
@@ -547,11 +566,14 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '800',
     color: '#64748B',
+    lineHeight: 18,
+    paddingTop: 2,
   },
   pageTitleText: {
     fontSize: 32,
     fontWeight: '900',
-    letterSpacing: -0.5,
+    lineHeight: 40,
+    paddingTop: 4,
   },
   navLogoutBtn: {
     width: 44,
@@ -612,6 +634,8 @@ const styles = StyleSheet.create({
     fontWeight: '800',
     color: '#64748B',
     textTransform: 'uppercase',
+    lineHeight: 18,
+    paddingTop: 2,
   },
   editBadge: {
     position: 'absolute',
@@ -727,6 +751,8 @@ const styles = StyleSheet.create({
     marginLeft: 4,
     textTransform: 'uppercase',
     letterSpacing: 0.5,
+    lineHeight: 20,
+    paddingTop: 2,
   },
   input: {
     borderWidth: 2,

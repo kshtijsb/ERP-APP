@@ -69,7 +69,7 @@ export default function FarmerDetailsScreen() {
           const { data, error } = await supabase
             .from('farmers')
             .select(`
-              id, name, phone_number, land_area, crop_type, variety, crop_duration, avatar_url,
+              id, name, phone_number, land_area, crop_type, variety, crop_duration, avatar_url, village, address,
               farms (*)
             `)
             .eq('id', id)
@@ -438,8 +438,16 @@ export default function FarmerDetailsScreen() {
 
         <ThemedText type="title" style={styles.profileName}>{farmer.name}</ThemedText>
         <View style={styles.metaRow}>
-          <IconSymbol name="phone.fill" size={12} color="#94A3B8" />
-          <ThemedText style={styles.profileMeta}>{farmer.phone_number || 'No contact info'}</ThemedText>
+          <View style={styles.metaItem}>
+            <IconSymbol name="phone.fill" size={12} color="#94A3B8" />
+            <ThemedText style={styles.profileMeta}>{farmer.phone_number || 'No contact'}</ThemedText>
+          </View>
+          {farmer.village && (
+            <View style={[styles.metaItem, styles.villageBadge]}>
+              <IconSymbol name="house.fill" size={12} color="#64748B" />
+              <ThemedText style={styles.villageText}>{farmer.village}</ThemedText>
+            </View>
+          )}
         </View>
 
         {weather && (
@@ -1010,19 +1018,40 @@ const styles = StyleSheet.create({
   avatarText: {
     fontSize: 44,
     fontWeight: '900',
+    lineHeight: 54,
+    paddingTop: 6,
   },
   profileName: {
     fontSize: 32,
     fontWeight: '900',
     color: '#0F172A',
     textAlign: 'center',
-    letterSpacing: -0.5,
+    lineHeight: 40,
+    paddingTop: 4,
   },
   metaRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
+    gap: 12,
     marginTop: 8,
+    flexWrap: 'wrap',
+    justifyContent: 'center',
+  },
+  metaItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  villageBadge: {
+    backgroundColor: 'rgba(100, 116, 139, 0.1)',
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 10,
+  },
+  villageText: {
+    fontSize: 13,
+    color: '#64748B',
+    fontWeight: '800',
   },
   profileMeta: {
     fontSize: 14,

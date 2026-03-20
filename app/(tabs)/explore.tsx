@@ -40,7 +40,7 @@ export default function FarmerDashboard() {
       const { data: onlineData, error } = await supabase
         .from('farmers')
         .select(`
-          id, name, phone_number, land_area, crop_type, crop_duration, avatar_url,
+          id, name, phone_number, land_area, crop_type, crop_duration, avatar_url, village, address, created_by,
           farms (
             id,
             boundary
@@ -61,7 +61,10 @@ export default function FarmerDashboard() {
         crop_duration: rec.crop_duration,
         avatar_url: rec.avatar_uri,
         farms: rec.farms,
+        village: rec.village,
+        address: rec.address,
         sync_status: rec.sync_status,
+        created_by: rec.created_by,
         is_offline: true
       }));
 
@@ -220,9 +223,17 @@ export default function FarmerDashboard() {
           
           <View style={styles.headerInfo}>
             <ThemedText type="defaultSemiBold" style={styles.farmerNameText}>{item.name}</ThemedText>
-            <View style={styles.phoneRow}>
-              <IconSymbol name="phone.fill" size={12} color="#94A3B8" />
-              <ThemedText style={styles.phoneText}>{item.phone_number || 'No contact'}</ThemedText>
+            <View style={styles.infoRow}>
+              <View style={styles.phoneRow}>
+                <IconSymbol name="phone.fill" size={10} color="#94A3B8" />
+                <ThemedText style={styles.phoneText}>{item.phone_number || 'No contact'}</ThemedText>
+              </View>
+              {item.village && (
+                <View style={[styles.villageBadge, { backgroundColor: colorScheme === 'dark' ? '#334155' : '#F1F5F9' }]}>
+                  <IconSymbol name="house.fill" size={10} color="#64748B" />
+                  <ThemedText style={styles.villageText}>{item.village}</ThemedText>
+                </View>
+              )}
             </View>
           </View>
           <View style={styles.statusBadgeContainer}>
@@ -351,7 +362,8 @@ export default function FarmerDashboard() {
     const mapped = farmers.filter(f => Array.isArray(f.farms) ? f.farms.length > 0 : !!f.farms).length;
     const offline = farmers.filter(f => f.is_offline).length;
     const visitRequests = farmers.filter(f => f.has_pending_visit).length;
-    return { total, mapped, offline, visitRequests };
+    const myReg = farmers.filter(f => f.created_by === user?.id).length;
+    return { total, mapped, offline, visitRequests, myReg };
   };
 
   const stats = getStatsOverview();
@@ -405,6 +417,10 @@ export default function FarmerDashboard() {
           <View style={[styles.quickStatCard, { backgroundColor: '#EEF2FF' }]}>
             <ThemedText style={[styles.quickStatValue, { color: '#4F46E5' }]}>{stats.offline}</ThemedText>
             <ThemedText style={styles.quickStatLabel}>{t('waitSync')}</ThemedText>
+          </View>
+          <View style={[styles.quickStatCard, { backgroundColor: '#FFF7ED' }]}>
+            <ThemedText style={[styles.quickStatValue, { color: '#EA580C' }]}>{stats.myReg}</ThemedText>
+            <ThemedText style={styles.quickStatLabel}>{t('myRegistrations')}</ThemedText>
           </View>
         </View>
 
@@ -499,11 +515,14 @@ const styles = StyleSheet.create({
     textTransform: 'uppercase',
     letterSpacing: 1.5,
     marginBottom: 4,
+    lineHeight: 18,
+    paddingTop: 2,
   },
   pageTitle: {
     fontSize: 32,
     fontWeight: '900',
-    letterSpacing: -0.5,
+    lineHeight: 40,
+    paddingTop: 4,
   },
   profileCircle: {
     width: 44,
@@ -534,21 +553,23 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '800',
     color: '#64748B',
+    lineHeight: 18,
+    paddingTop: 2,
   },
   quickStatsRow: {
     flexDirection: 'row',
-    gap: 12,
-    marginBottom: 25,
+    gap: 8,
+    marginBottom: 20,
   },
   quickStatCard: {
     flex: 1,
-    padding: 16,
-    borderRadius: 20,
+    padding: 10,
+    borderRadius: 16,
     alignItems: 'center',
     justifyContent: 'center',
   },
   quickStatValue: {
-    fontSize: 22,
+    fontSize: 18,
     fontWeight: '900',
     marginBottom: 2,
   },
@@ -677,14 +698,34 @@ const styles = StyleSheet.create({
     color: '#0F172A',
     marginBottom: 4,
   },
+  infoRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginTop: 2,
+    flexWrap: 'wrap',
+  },
   phoneRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
+    gap: 4,
+  },
+  villageBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 6,
+  },
+  villageText: {
+    fontSize: 11,
+    color: '#64748B',
+    fontWeight: '700',
   },
   phoneText: {
-    fontSize: 13,
-    color: '#64748B',
+    fontSize: 12,
+    color: '#94A3B8',
     fontWeight: '600',
   },
   statusBadgeContainer: {

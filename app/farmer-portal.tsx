@@ -51,6 +51,7 @@ export default function FarmerPortalScreen() {
   const [isRegistering, setIsRegistering] = useState(false);
   const [regName, setRegName] = useState('');
   const [regPhone, setRegPhone] = useState('');
+  const [regVillage, setRegVillage] = useState('');
   const [regAddress, setRegAddress] = useState('');
   const [selectedCrops, setSelectedCrops] = useState<{name: string, variety: string}[]>([]);
   const [availableCrops] = useState(['Tomato', 'Cotton', 'Sugarcane', 'Soybean', 'Strawberry', 'Grapes', 'Pomegranate', 'Onion', 'Rice', 'Wheat', 'Maize']);
@@ -142,6 +143,7 @@ export default function FarmerPortalScreen() {
       const localId = await saveFarmerSelfOffline({
         name: regName,
         phone_number: cleanPhone,
+        village: regVillage,
         address: regAddress,
         crop_type: cropTypeString,
         variety: varietyString
@@ -151,6 +153,7 @@ export default function FarmerPortalScreen() {
         id: `local_${localId}`,
         name: regName,
         phone_number: cleanPhone,
+        village: regVillage,
         address: regAddress,
         crop_type: cropTypeString,
         variety: varietyString
@@ -411,10 +414,19 @@ export default function FarmerPortalScreen() {
                   onChangeText={setRegPhone}
                 />
 
-                <ThemedText style={styles.label}>{t('villageAddress')}</ThemedText>
+                <ThemedText style={styles.label}>Village</ThemedText>
                 <TextInput
                   style={[styles.input, { color: Colors[colorScheme ?? 'light'].text, borderColor: Colors[colorScheme ?? 'light'].border }]}
                   placeholder={t('enterVillage')}
+                  placeholderTextColor="#94A3B8"
+                  value={regVillage}
+                  onChangeText={setRegVillage}
+                />
+
+                <ThemedText style={styles.label}>Address (Optional)</ThemedText>
+                <TextInput
+                  style={[styles.input, { color: Colors[colorScheme ?? 'light'].text, borderColor: Colors[colorScheme ?? 'light'].border }]}
+                  placeholder="Street / Area / Landmark"
                   placeholderTextColor="#94A3B8"
                   value={regAddress}
                   onChangeText={setRegAddress}
@@ -880,6 +892,8 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '800',
     color: '#64748B',
+    lineHeight: 18,
+    paddingTop: 2,
   },
   loginContainer: {
     flex: 1,
@@ -896,6 +910,8 @@ const styles = StyleSheet.create({
     fontWeight: '900',
     marginTop: 20,
     marginBottom: 10,
+    lineHeight: 34,
+    paddingTop: 4,
   },
   loginSub: {
     textAlign: 'center',
@@ -1052,6 +1068,8 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: '#64748B',
     marginBottom: 8,
+    lineHeight: 20,
+    paddingTop: 2,
   },
   input: {
     height: 60,
@@ -1090,12 +1108,15 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     textTransform: 'uppercase',
     letterSpacing: 1,
+    lineHeight: 18,
+    paddingTop: 2,
   },
   farmerNameText: {
     fontSize: 28,
     fontWeight: '900',
     color: '#0F172A',
-    letterSpacing: -1,
+    lineHeight: 34,
+    paddingTop: 4,
   },
   logoutBtn: {
     width: 44,

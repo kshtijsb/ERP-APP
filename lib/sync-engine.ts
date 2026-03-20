@@ -52,6 +52,8 @@ export const syncOfflineData = async () => {
           land_area: record.land_area ? parseFloat(record.land_area) : null,
           crop_type: record.crop_type,
           crop_duration: record.crop_duration,
+          village: record.village,
+          address: record.address,
           avatar_url: avatarUrl,
           created_by: record.created_by
         }])
