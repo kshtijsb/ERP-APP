@@ -12,7 +12,8 @@
       "supportsTablet": true,
       "infoPlist": {
         "NSLocationWhenInUseUsageDescription": "This app uses your location to map farm boundaries and provide crop insights.",
-        "NSCameraUsageDescription": "This app uses the camera to take farm and crop photos."
+        "NSCameraUsageDescription": "This app uses the camera to take farm and crop photos.",
+        "ITSAppUsesNonExemptEncryption": false
       },
       "config": {
         "googleMapsApiKey": "AIzaSyBDXnTuvbAkFXuM-qNcBppwtu-SmtoCQko"
