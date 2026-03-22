@@ -1159,6 +1159,8 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: '700',
     color: '#64748B',
+    lineHeight: 18,
+    paddingTop: 2,
   },
   activeTabText: {
     color: '#fff',
@@ -1284,6 +1286,8 @@ const styles = StyleSheet.create({
     fontSize: 10,
     fontWeight: '800',
     textTransform: 'uppercase',
+    lineHeight: 14,
+    paddingTop: 1,
   },
   section: {
     paddingHorizontal: 20,
@@ -1300,6 +1304,8 @@ const styles = StyleSheet.create({
     fontWeight: '900',
     letterSpacing: -0.8,
     color: '#0F172A',
+    lineHeight: 28,
+    paddingTop: 4,
   },
   aiBadge: {
     backgroundColor: '#F8FAFC',

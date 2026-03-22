@@ -16,6 +16,7 @@ export const translations = {
     phone: 'Phone Number',
     accessPortal: 'Access Portal',
     back: 'Back',
+    cancel: 'Cancel',
 
     // Registration (Staff)
     newRegistration: 'Registration',
@@ -82,6 +83,8 @@ export const translations = {
     observationLabel: 'Observation',
     soilStatusLabel: 'Soil Status',
     happyFarming: 'Happy Farming!',
+    shareDigitalPrescription: 'Share Digital Prescription',
+    deleteProfile: 'Delete Profile',
     farmBoundary: 'Farm Boundary',
     tapToViewMap: 'Tap to View Full Map',
     offlineRecord: 'Offline Record',
@@ -164,6 +167,7 @@ export const translations = {
     phone: 'फोन नंबर',
     accessPortal: 'पोर्टलवर जा',
     back: 'मागे',
+    cancel: 'रद्द करा',
 
     // Registration (Staff)
     newRegistration: 'नोंदणी',
@@ -230,6 +234,8 @@ export const translations = {
     observationLabel: 'निरीक्षण',
     soilStatusLabel: 'मातीची स्थिती',
     happyFarming: 'शुभेच्छा!',
+    shareDigitalPrescription: 'डिजिटल प्रिस्क्रिप्शन शेअर करा',
+    deleteProfile: 'प्रोफाइल हटवा',
     farmBoundary: 'शेताची सीमा',
     tapToViewMap: 'पूर्ण नकाशा पाहण्यासाठी टॅप करा',
     offlineRecord: 'ऑफलाइन रेकॉर्ड',

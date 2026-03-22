@@ -470,11 +470,12 @@ export const updateFarmerWeather = async (farmerId: string, weatherData: string)
   const database = await getDB();
   // Handle both local_ ID and remote ID
   const localMatch = farmerId.startsWith('local_');
-  const query = localMatch 
-    ? 'UPDATE pending_farmers SET weather_data = ?, last_weather_fetch = CURRENT_TIMESTAMP WHERE id = ?'
-    : 'UPDATE pending_farmers SET weather_data = ?, last_weather_fetch = CURRENT_TIMESTAMP WHERE id = (SELECT id FROM pending_farmers WHERE id = ?)'; // This part might need better logic if we want to cache weather for online farmers too
+  if (!localMatch) return; // Weather caching for online farmers not yet supported in local DB
   
-  const id = localMatch ? parseInt(farmerId.replace('local_', '')) : farmerId;
+  const query = 'UPDATE pending_farmers SET weather_data = ?, last_weather_fetch = CURRENT_TIMESTAMP WHERE id = ?';
+  const id = parseInt(farmerId.replace('local_', ''));
+  if (isNaN(id)) return;
+  
   await database.runAsync(query, [weatherData, id]);
 };
 

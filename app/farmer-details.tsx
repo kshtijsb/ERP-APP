@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { StyleSheet, View, ScrollView, ActivityIndicator, Alert, TouchableOpacity, useColorScheme, Image, Linking, Platform, TextInput } from 'react-native';
 import { useLocalSearchParams, useRouter, Stack } from 'expo-router';
-import { ActionSheetProvider, useActionSheet } from '@expo/react-native-action-sheet';
+import { useActionSheet } from '@expo/react-native-action-sheet';
 import { useTranslation } from '@/context/language-context';
 import MapView, { Polygon, Overlay, UrlTile, PROVIDER_GOOGLE } from 'react-native-maps';
 import { supabase } from '@/lib/supabase';
@@ -42,6 +42,7 @@ export default function FarmerDetailsScreen() {
   const router = useRouter();
   const colorScheme = useColorScheme();
   const { role } = useAuth();
+  const { showActionSheetWithOptions } = useActionSheet();
   const [farmer, setFarmer] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [isNotesModalVisible, setIsNotesModalVisible] = useState(false);
@@ -93,7 +94,7 @@ export default function FarmerDetailsScreen() {
     if (!id) return;
     setRefreshingActivities(true);
     try {
-      const farmerId = typeof id === 'string' ? id : '';
+      const farmerId = Array.isArray(id) ? id[0] : (id ?? '');
       
       // 1. Fetch Local Activities
       const localNotes = await getFieldNotesByFarmerId(farmerId);
@@ -408,12 +409,52 @@ export default function FarmerDetailsScreen() {
     );
   };
 
+  const handleOpenMenu = () => {
+    const options = [t('shareDigitalPrescription'), t('logQuickVisit'), t('deleteProfile'), t('cancel')];
+    const destructiveButtonIndex = 2;
+    const cancelButtonIndex = 3;
+
+    showActionSheetWithOptions(
+      {
+        options,
+        cancelButtonIndex,
+        destructiveButtonIndex,
+        title: farmer?.name,
+        message: 'Manage farmer record',
+        userInterfaceStyle: colorScheme === 'dark' ? 'dark' : 'light',
+      },
+      (selectedIndex?: number) => {
+        switch (selectedIndex) {
+          case 0:
+            handleSharePrescription();
+            break;
+          case 1:
+            handleQuickVisit();
+            break;
+          case 2:
+            handleDeleteProfile();
+            break;
+        }
+      }
+    );
+  };
+
   return (
     <ScrollView 
       style={[styles.container, { backgroundColor: Colors[colorScheme ?? 'light'].background }]}
       contentContainerStyle={styles.contentContainer}
     >
-      <Stack.Screen options={{ title: 'Farmer Profile', headerShadowVisible: false }} />
+      <Stack.Screen 
+        options={{ 
+          title: 'Farmer Profile', 
+          headerShadowVisible: false,
+          headerRight: () => (
+            <TouchableOpacity onPress={handleOpenMenu} style={{ marginRight: 15 }}>
+              <IconSymbol name="ellipsis.circle.fill" size={24} color={Colors[colorScheme ?? 'light'].tint} />
+            </TouchableOpacity>
+          )
+        }} 
+      />
       
       <ThemedView style={styles.profileHero}>
         <View style={styles.avatarWrapperContainer}>
@@ -632,24 +673,6 @@ export default function FarmerDetailsScreen() {
         </TouchableOpacity>
 
         <TouchableOpacity 
-          style={[styles.quickVisitButton, { borderColor: '#6366F1' }]}
-          onPress={handleQuickVisit}
-        >
-          <IconSymbol name="person.fill.checkmark" size={18} color="#6366F1" />
-          <ThemedText style={[styles.quickVisitButtonText, { color: '#6366F1' }]}>
-            {t('logQuickVisit')}
-          </ThemedText>
-        </TouchableOpacity>
-
-        <TouchableOpacity 
-          style={styles.addPrescriptionButton}
-          onPress={() => setIsPrescriptionModalVisible(true)}
-        >
-          <IconSymbol name="pills.fill" size={20} color="#6366F1" />
-          <ThemedText style={styles.addPrescriptionText}>Add Field Prescription</ThemedText>
-        </TouchableOpacity>
-
-        <TouchableOpacity 
           style={[styles.aiAdvisorButton, { backgroundColor: '#F0F9FF', borderColor: Colors[colorScheme ?? 'light'].tint }]}
           onPress={() => setIsAiModalVisible(true)}
         >
@@ -662,16 +685,6 @@ export default function FarmerDetailsScreen() {
         </TouchableOpacity>
 
         <View style={styles.actionRowSplit}>
-          <TouchableOpacity 
-            style={[styles.splitButton, { backgroundColor: '#E0F2FE', borderColor: '#0EA5E9' }]}
-            onPress={handleSharePrescription}
-          >
-            <IconSymbol name="paperplane.fill" size={16} color="#0EA5E9" />
-            <ThemedText style={[styles.splitButtonText, { color: '#0EA5E9' }]}>
-              {t('sharePrescription')}
-            </ThemedText>
-          </TouchableOpacity>
-
           <TouchableOpacity 
             style={[styles.splitButton, { backgroundColor: '#F0FDF4', borderColor: '#22C55E' }]}
             onPress={() => setIsTreatmentModalVisible(true)}
@@ -743,18 +756,6 @@ export default function FarmerDetailsScreen() {
         )}
       </View>
 
-      {role === 'superadmin' && (
-        <View style={styles.dangerZone}>
-          <ThemedText style={styles.dangerTitle}>Danger Zone</ThemedText>
-          <TouchableOpacity 
-            style={styles.deleteButton}
-            onPress={handleDeleteProfile}
-          >
-            <IconSymbol name="trash.fill" size={18} color="#EF4444" />
-            <ThemedText style={styles.deleteButtonText}>Permanently Delete Profile</ThemedText>
-          </TouchableOpacity>
-        </View>
-      )}
       <FieldNotesModal 
         isVisible={isNotesModalVisible}
         onClose={() => setIsNotesModalVisible(false)}

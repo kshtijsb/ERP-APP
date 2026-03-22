@@ -56,11 +56,27 @@ export default function GlobalMapScreen() {
     );
   }
 
+  // Helper to get formatted boundary (handles string or object)
+  const getParsedBoundary = (boundary: any) => {
+    if (!boundary) return [];
+    if (typeof boundary === 'string') {
+      try {
+        return JSON.parse(boundary);
+      } catch (e) {
+        console.error('Failed to parse boundary string:', e);
+        return [];
+      }
+    }
+    return boundary;
+  };
+
   // Calculate center of all polygons if available, otherwise default to a general area
-  const initialRegion = farms.length > 0 && farms[0].boundary.length > 0
+  const firstFarmBoundary = farms.length > 0 ? getParsedBoundary(farms[0].boundary) : [];
+  
+  const initialRegion = firstFarmBoundary.length > 0
     ? {
-      latitude: farms[0].boundary[0].latitude,
-      longitude: farms[0].boundary[0].longitude,
+      latitude: firstFarmBoundary[0].latitude,
+      longitude: firstFarmBoundary[0].longitude,
       latitudeDelta: 0.05,
       longitudeDelta: 0.05,
     }
@@ -82,19 +98,24 @@ export default function GlobalMapScreen() {
         mapType="hybrid"
         showsUserLocation={true}
       >
-        {farms.map((farm) => (
-          <Polygon
-            key={farm.id}
-            coordinates={farm.boundary}
-            fillColor="rgba(34, 197, 94, 0.4)"
-            strokeColor="#22C55E"
-            strokeWidth={2}
-            tappable
-            onPress={() => {
-              router.push({ pathname: '/farmer-details', params: { id: farm.farmers?.id || farm.farmer_id } });
-            }}
-          />
-        ))}
+        {farms.map((farm) => {
+          const parsedBoundary = getParsedBoundary(farm.boundary);
+          if (parsedBoundary.length === 0) return null;
+          
+          return (
+            <Polygon
+              key={farm.id}
+              coordinates={parsedBoundary}
+              fillColor="rgba(34, 197, 94, 0.4)"
+              strokeColor="#22C55E"
+              strokeWidth={2}
+              tappable
+              onPress={() => {
+                router.push({ pathname: '/farmer-details', params: { id: farm.farmers?.id || farm.farmer_id } });
+              }}
+            />
+          );
+        })}
       </MapView>
 
       <ThemedView style={styles.floatingHeader}>

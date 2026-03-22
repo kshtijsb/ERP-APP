@@ -16,13 +16,17 @@ export const unstable_settings = {
   anchor: '(tabs)',
 };
 
+import { ActionSheetProvider } from '@expo/react-native-action-sheet';
+
 export default function RootLayout() {
   return (
-    <LanguageProvider>
-      <AuthProvider>
-        <RootLayoutNav />
-      </AuthProvider>
-    </LanguageProvider>
+    <ActionSheetProvider>
+      <LanguageProvider>
+        <AuthProvider>
+          <RootLayoutNav />
+        </AuthProvider>
+      </LanguageProvider>
+    </ActionSheetProvider>
   );
 }
 
